@@ -230,10 +230,7 @@ final class CoverPush {
         // does not hold both ends of the fade - after its own restart, most of all. Never with
         // the display off: the frames would be composed and uploaded into a screen nobody is
         // looking at, and the clock is not springing either.
-        // No fade when leaving cover: HyperExtreme's spatial layer is a child of this wallpaper
-        // leash and inherits its alpha, so a fade back to the user's wallpaper drags our layer
-        // down with it - the user sees the wallpaper come up and then the spatial one snap in.
-        out.putExtra("fade", on && Main.sFadeWp && Main.screenOn());
+        out.putExtra("fade", Main.sFadeWp && Main.screenOn());
         if (!on) {
             CoverCardLayer.clear();
             if (Main.sVideoWallpaper) showVideoCover(ctx, false, null, null, 0, gen, key);
