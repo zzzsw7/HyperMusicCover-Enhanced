@@ -142,6 +142,8 @@ object ModuleBridge {
         val closeLyriclessCover: Boolean = false,
         /** Draw the singing words brighter than white on an HDR screen. */
         val lyricsHdr: Boolean = false,
+    /** Frame budget of the lyric animation in fps (30/60/90/120). */
+    val lyricFps: Int = 60,
         /** Draw each line's translation under it. On unless the user turns it off. */
         val lyricsTrans: Boolean = true,
         /** Online translation mode: 0 off, 1 original + translation (2 reserved). */
@@ -537,6 +539,9 @@ object ModuleBridge {
     /** The lyrics are always on now; this is how they are turned off for a session. */
     fun setLyrics(context: Context, on: Boolean) =
         send(context, "lyrics") { putExtra("on", on) }
+
+    fun setLyricFps(context: Context, fps: Int) =
+        send(context, "lyricfps") { putExtra("v", fps) }
 
     fun setLyricsHdr(context: Context, on: Boolean) =
         send(context, "lyrichdr") { putExtra("on", on) }
@@ -948,6 +953,7 @@ object ModuleBridge {
             lyricsKeepOn = b.getBoolean("lyrickeep", false),
             closeLyriclessCover = b.getBoolean("lyriclessclose", false),
             lyricsHdr = b.getBoolean("lyrichdr", false),
+            lyricFps = b.getInt("lyricfps", 60),
             // Defaults the other way: this one is on for anyone whose module predates the key.
             lyricsTrans = b.getBoolean("lyrictrans", true),
             lyricOnlineMode = b.getInt("lyrictrmode", 0),

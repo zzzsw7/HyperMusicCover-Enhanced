@@ -174,6 +174,12 @@
     <string name="lyrics_align_left">Left</string>
     <string name="lyrics_align_center">Center</string>
     <string name="lyrics_align_right">Right</string>
+    <string name="lyrics_fps">歌词帧率</string>
+    <string name="lyrics_fps_summary">锁屏歌词动画的每秒帧数；越低越省电，60 帧观感基本无差别</string>
+    <string name="lyrics_fps_30">30 fps（最省电）</string>
+    <string name="lyrics_fps_60">60 fps（推荐）</string>
+    <string name="lyrics_fps_90">90 fps</string>
+    <string name="lyrics_fps_120">120 fps（最顺滑）</string>
     <string name="lyrics_hdr">HDR highlight (experimental)</string>
     <string name="lyrics_hdr_summary">May drop frames</string>
     <string name="lyrics_keep_on">Keep the screen on for lyrics</string>

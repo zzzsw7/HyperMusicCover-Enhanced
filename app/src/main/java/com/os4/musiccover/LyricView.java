@@ -459,17 +459,18 @@ final class LyricView extends View {
         long now = android.os.SystemClock.uptimeMillis();
         if (sFps >= 0 && now - sFpsReadAt < 2000L) return sFps;
         sFpsReadAt = now;
-        int value = 60;
+        // The app's setting is the source; the property stays as an adb override for experiments.
+        int value = Main.sLyricFps;
         try {
             Class<?> sp = Class.forName("android.os.SystemProperties");
             Object raw = sp.getMethod("get", String.class, String.class)
-                    .invoke(null, PROP_LYRIC_FPS, "60");
+                    .invoke(null, PROP_LYRIC_FPS, "");
             if (raw instanceof String) {
                 String text = ((String) raw).trim();
                 if (!text.isEmpty()) value = Integer.parseInt(text);
             }
         } catch (Throwable ignored) {
-            // Hidden API blocked or unparsable: keep the default.
+            // Hidden API blocked or unparsable: keep the app's setting.
         }
         sFps = value;
         return value;

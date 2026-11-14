@@ -1247,6 +1247,26 @@ private fun LyricEffectsControls(
                     ModuleBridge.setLyricsHdr(context, it)
                 },
             )
+            // Frame budget (2026-11-14): the lyric view redraws the whole block whenever anything
+            // moved, so on a 120Hz panel it was most of a SystemUI core. 60fps halves that.
+            val fpsChoices = remember { listOf(30, 60, 90, 120) }
+            WindowDropdownPreference(
+                title = stringResource(R.string.lyrics_fps),
+                summary = stringResource(R.string.lyrics_fps_summary),
+                items = listOf(
+                    stringResource(R.string.lyrics_fps_30),
+                    stringResource(R.string.lyrics_fps_60),
+                    stringResource(R.string.lyrics_fps_90),
+                    stringResource(R.string.lyrics_fps_120),
+                ),
+                selectedIndex = fpsChoices.indexOf(module.lyricFps).takeIf { it >= 0 } ?: 1,
+                enabled = enabled,
+                onSelectedIndexChange = { index ->
+                    val fps = fpsChoices.getOrElse(index) { 60 }
+                    onChange(module.copy(lyricFps = fps))
+                    ModuleBridge.setLyricFps(context, fps)
+                },
+            )
             SwitchPreference(
                 title = stringResource(R.string.lyrics_bpm_companion),
                 summary = stringResource(R.string.lyrics_bpm_companion_summary),

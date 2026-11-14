@@ -734,6 +734,16 @@ public class Main extends XposedModule {
      * place that holds both pictures; all this decides is whether to ask for it.
      */
     static volatile boolean sFadeWp = true;
+
+    /**
+     * Frame budget for the lyric animation, in fps (30/60/90/120; 0 = uncapped).
+     *
+     * Why it exists: `LyricView.frame` runs `step()` every display frame and redraws the whole
+     * lyric block when anything moved. On a 120Hz panel that is most of a SystemUI core while the
+     * lock screen shows lyrics (measured 2026-11-14: 97% at 120fps, ~40% at 60fps). Only the
+     * redraw is throttled, so the springs still settle every frame.
+     */
+    static volatile int sLyricFps = 60;
     /**
      * Whether the COVER VIDEO ITSELF crossfades into the cover, in the wallpaper window.
      *
@@ -2104,6 +2114,7 @@ public class Main extends XposedModule {
                     + "\nlyriclessclose=" + (sCloseLyriclessCover ? 1 : 0)
                     + "\nfadewp=" + (sFadeWp ? 1 : 0)
                     + "\nvcfade=" + (sVideoFade ? 1 : 0)
+                    + "\nlyricfps=" + sLyricFps
                     + "\nfsmode2=" + sFadeMode
                     // A measurement rather than a setting, and kept for the same reason the
                     // geometry is: a fresh SystemUI should not have to relearn it to use it.
@@ -2265,6 +2276,8 @@ public class Main extends XposedModule {
                         else if ("lyriclessclose".equals(k)) sCloseLyriclessCover = "1".equals(v);
                         else if ("fadewp".equals(k)) sFadeWp = "1".equals(v);
                         else if ("vcfade".equals(k)) sVideoFade = "1".equals(v);
+                        else if ("lyricfps".equals(k))
+                            sLyricFps = Math.max(30, Math.min(120, Integer.parseInt(v)));
                         else if ("fsmode2".equals(k)) sFadeMode = Integer.parseInt(v);
                         else if ("covergap".equals(k)) CoverPush.sCoverFadeGapMs = Long.parseLong(v);
                         else if ("wallpaperdim".equals(k)) sWallpaperDim = Math.max(0, Math.min(80, Integer.parseInt(v)));
@@ -3096,6 +3109,10 @@ public class Main extends XposedModule {
                         sFadeWp = i.getBooleanExtra("on", !sFadeWp);
                         saveState();
                         Xp.log(TAG + "wallpaper crossfade " + (sFadeWp ? "on" : "off"));
+                    } else if ("lyricfps".equals(op)) {
+                        sLyricFps = Math.max(30, Math.min(120, i.getIntExtra("v", sLyricFps)));
+                        saveState();
+                        Xp.log(TAG + "lyric frame budget " + sLyricFps + " fps");
                     } else if ("vcfade".equals(op)) {
                         // Off by default: see the note on sVideoFade. Setting it here re-pushes
                         // the art, because the cover video that is on the device right now was
@@ -3320,6 +3337,7 @@ public class Main extends XposedModule {
                         out.putBoolean("lyrickeep", LockLyrics.sKeepOn);
                         out.putBoolean("lyrichdr", LockLyrics.sHdr);
                         out.putBoolean("lyrictrans", LockLyrics.sTrans);
+                        out.putInt("lyricfps", sLyricFps);
                         out.putInt("lyrictrmode", LockLyrics.sOnlineTranslateMode);
                         out.putString("lyrictrprovider", LockLyrics.sTranslateProvider);
                         out.putString("lyrictrendpoint", LockLyrics.sTranslateEndpoint);

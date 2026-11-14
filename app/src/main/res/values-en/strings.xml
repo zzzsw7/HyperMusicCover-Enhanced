@@ -159,6 +159,12 @@
     <string name="lyrics_align_left">Left</string>
     <string name="lyrics_align_center">Center</string>
     <string name="lyrics_align_right">Right</string>
+    <string name="lyrics_fps">Lyric frame rate</string>
+    <string name="lyrics_fps_summary">Frames per second for the lock screen lyric animation; lower saves power, 60 looks the same</string>
+    <string name="lyrics_fps_30">30 fps (lowest power)</string>
+    <string name="lyrics_fps_60">60 fps (recommended)</string>
+    <string name="lyrics_fps_90">90 fps</string>
+    <string name="lyrics_fps_120">120 fps (smoothest)</string>
     <string name="lyrics_hdr">HDR highlight (experimental)</string>
     <string name="lyrics_hdr_summary">May drop frames</string>
     <string name="lyrics_keep_on">Keep the screen on for lyrics</string>
