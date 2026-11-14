@@ -176,10 +176,29 @@ final class CoverPush {
         }
     }
 
+    /**
+     * Last value handed to `hyperextreme_yield_cover`, so a push that changes nothing is not a write.
+     *
+     * HyperExtreme's spatial wallpaper layer sits above this wallpaper and steps aside while cover
+     * mode is up; the flag is how it learns. Written only on a real change: this path runs on every
+     * artwork push, not just on entering or leaving cover mode (2026-11-14).
+     */
+    private static boolean sYieldOn = false;
+
     private static void pushRenderedArtToWallpaper(
             Context ctx, boolean on, Bitmap art, boolean temporaryThumbnail, int gen, String key) {
         if (!currentPush(gen, key)) return;
         long t0 = android.os.SystemClock.uptimeMillis();
+        // HyperExtreme yield signal: cover mode on/off. Same channel as hypermusiccover_force_colon
+        // (SystemUI may write Settings.Global); a failure only means no yielding.
+        if (sYieldOn != on) {
+            try {
+                android.provider.Settings.Global.putInt(
+                        ctx.getContentResolver(), "hyperextreme_yield_cover", on ? 1 : 0);
+                sYieldOn = on;
+            } catch (Throwable ignored) {
+            }
+        }
         // A small private copy for an extension's backdrop (ExtensionSpectrum): the source
         // itself is recycled with the composition it feeds.
         if (on && art != null && !temporaryThumbnail) ExtensionSpectrum.noteArtwork(art, key);
@@ -211,7 +230,10 @@ final class CoverPush {
         // does not hold both ends of the fade - after its own restart, most of all. Never with
         // the display off: the frames would be composed and uploaded into a screen nobody is
         // looking at, and the clock is not springing either.
-        out.putExtra("fade", Main.sFadeWp && Main.screenOn());
+        // No fade when leaving cover: HyperExtreme's spatial layer is a child of this wallpaper
+        // leash and inherits its alpha, so a fade back to the user's wallpaper drags our layer
+        // down with it - the user sees the wallpaper come up and then the spatial one snap in.
+        out.putExtra("fade", on && Main.sFadeWp && Main.screenOn());
         if (!on) {
             CoverCardLayer.clear();
             if (Main.sVideoWallpaper) showVideoCover(ctx, false, null, null, 0, gen, key);

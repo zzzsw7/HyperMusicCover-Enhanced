@@ -441,12 +441,53 @@ final class LyricView extends View {
     private boolean looping;
     private final int[] loc = new int[2];
 
+    /**
+     * Frame budget for the lyric animation, in fps (0 = no cap), from
+     * `debug.hyperextreme.lyric_fps`.
+     *
+     * Why: `step()` runs every display frame and `invalidate()` redraws the whole lyric block -
+     * on a 120Hz panel that is most of a SystemUI core while the lock screen shows lyrics
+     * (measured 2026-11-14: 97% at 120fps, ~40% at 60fps). The spring math is cheap; the draw is
+     * not, so only the redraw is throttled and `step()` still runs every frame.
+     */
+    private static final String PROP_LYRIC_FPS = "debug.hyperextreme.lyric_fps";
+    private static long sFpsReadAt;
+    private static int sFps = -1;
+    private long lastInvalidateAt;
+
+    private static int lyricFps() {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (sFps >= 0 && now - sFpsReadAt < 2000L) return sFps;
+        sFpsReadAt = now;
+        int value = 60;
+        try {
+            Class<?> sp = Class.forName("android.os.SystemProperties");
+            Object raw = sp.getMethod("get", String.class, String.class)
+                    .invoke(null, PROP_LYRIC_FPS, "60");
+            if (raw instanceof String) {
+                String text = ((String) raw).trim();
+                if (!text.isEmpty()) value = Integer.parseInt(text);
+            }
+        } catch (Throwable ignored) {
+            // Hidden API blocked or unparsable: keep the default.
+        }
+        sFps = value;
+        return value;
+    }
+
     private final Runnable frame = new Runnable() {
         @Override
         public void run() {
             noteFrameGap(now());
             looping = false;
-            if (step()) invalidate();
+            if (step()) {
+                long frameNow = now();
+                int fps = lyricFps();
+                if (fps <= 0 || frameNow - lastInvalidateAt >= Math.max(1L, 1000L / fps)) {
+                    lastInvalidateAt = frameNow;
+                    invalidate();
+                }
+            }
             if (needsFrames()) {
                 looping = true;
                 postOnAnimation(this);
