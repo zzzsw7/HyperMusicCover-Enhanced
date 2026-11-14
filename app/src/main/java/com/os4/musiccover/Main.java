@@ -11471,7 +11471,16 @@ public class Main extends XposedModule {
         // the cover up wherever it was touched, and in it the lyrics took the cover down (the
         // maintainer, 2026-10-24). The pill, the card and its thumbnail have their own taps.
         // A full-screen cover is itself the thing, all of it.
-        if (!sCoverMode) return;
+        //
+        // 2026-11-14: entering is allowed again. Making the bare wallpaper a no-op above left no
+        // tap that could bring the cover up - a track change was the only way back in - while the
+        // app's own "single tap toggles the cover" switch promises both directions. The guards
+        // above (card showing, not the shade/CC/bouncer, in the band between the status bar and
+        // the card) already keep this away from the clock and from the empty lock screen.
+        if (!sCoverMode) {
+            enterFromTap("tap at y=" + y);
+            return;
+        }
         boolean fullScreen = effectiveCoverStyle().mode != CoverCardStyle.CARD;
         if (!fullScreen && (LockLyrics.wantsCompactArtwork() || !CoverCardLayer.artworkAt(x, y))) return;
         if (!sCloseLyriclessCover && LockLyrics.sEnabled && !LockLyrics.hasLyrics()) {
