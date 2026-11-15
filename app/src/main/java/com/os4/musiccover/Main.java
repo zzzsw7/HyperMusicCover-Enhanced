@@ -8871,7 +8871,8 @@ public class Main extends XposedModule {
                 lyricsButton && !fullScreenLyrics && LockLyrics.wantsCompactArtwork());
         alignCardTextLeft(card, (TextView) sCardTitle, hideP, lyricsInset);
         alignCardTextLeft(card, (TextView) sCardArtist, hideP, lyricsInset);
-        LyricsButton.place(card, (TextView) sCardTitle, (TextView) sCardArtist, sCardArt);
+        LyricsButton.place(card, (TextView) sCardTitle, (TextView) sCardArtist, sCardArt,
+                hideP >= 0.999f);
         applyTitleTap((TextView) sCardTitle, sMcTitleTap && sCoverMode && onKeyguard);
         if (onKeyguard && !sCardForced) sampleCardRect(card, p);
         MediaCardRuntime.afterCardPass(card);

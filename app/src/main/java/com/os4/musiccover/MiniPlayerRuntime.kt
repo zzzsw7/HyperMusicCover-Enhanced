@@ -11626,6 +11626,7 @@ private class MiniPlayerController(
      * nothing else is out, and the user has not collapsed it since (that clears the key).
      */
     private var restoreTries = 0
+    private var restoreReleased = false
 
     private var restoreLogAt = 0L
 
@@ -11646,6 +11647,12 @@ private class MiniPlayerController(
             return
         }
         if (rowFor(want) == null) {
+            // A notification row is NOT out of the stack by itself: the OEM panel had released
+            // it, and that release is what the mini player draws as a row. Ask for it again.
+            if (want != MUSIC_ISLAND && !restoreReleased) {
+                restoreReleased = true
+                LockIslands.release(want)
+            }
             if (++restoreTries <= 20) handler.postDelayed({ scheduleRefresh() }, 300)
             else restoreTries = 0
             restoreLog("restore: row " + want.takeLast(12) + " missing (try " + restoreTries
@@ -11653,6 +11660,7 @@ private class MiniPlayerController(
             return
         }
         restoreTries = 0
+        restoreReleased = false
         Xp.log("MCMini: restoring the expanded card " + want.takeLast(12))
         expandNote(want)
     }

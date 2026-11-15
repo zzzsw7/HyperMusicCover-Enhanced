@@ -194,6 +194,7 @@ internal object LockIslands {
     private fun clearReleased() {
         val keep = sceneKey
         released.clear()
+        MiniPlayerRuntime.rememberExpanded(null)
         if (keep != null) released.add(keep)
     }
 
@@ -226,6 +227,7 @@ internal object LockIslands {
         sceneKey = null
         scene = null
         released.remove(key)
+        MiniPlayerRuntime.rememberExpanded(null)
         runCatching { ImmersiveHost.close(closed) }
     }
 
@@ -505,7 +507,10 @@ internal object LockIslands {
             }
             return
         }
-        if (released.add(key)) invalidate("island $key released")
+        if (released.add(key)) {
+            invalidate("island $key released")
+            MiniPlayerRuntime.rememberExpanded(key)
+        }
         val opened = sceneOf(key)
         if (opened != null && key != sceneKey) {
             scene?.let { runCatching { ImmersiveHost.close(it) } }
