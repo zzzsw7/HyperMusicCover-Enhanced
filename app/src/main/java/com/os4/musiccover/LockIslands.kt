@@ -194,7 +194,6 @@ internal object LockIslands {
     private fun clearReleased() {
         val keep = sceneKey
         released.clear()
-        MiniPlayerRuntime.rememberExpanded(null)
         if (keep != null) released.add(keep)
     }
 
@@ -227,7 +226,6 @@ internal object LockIslands {
         sceneKey = null
         scene = null
         released.remove(key)
-        MiniPlayerRuntime.rememberExpanded(null)
         runCatching { ImmersiveHost.close(closed) }
     }
 
@@ -535,7 +533,11 @@ internal object LockIslands {
             }
             return
         }
-        if (released.remove(key)) invalidate("island $key recaptured")
+        if (released.remove(key)) {
+            invalidate("island $key recaptured")
+            // The user put this row back: stop bringing it out again on the next lock.
+            MiniPlayerRuntime.rememberExpanded(null)
+        }
         if (key == sceneKey) {
             val closed = scene
             sceneKey = null

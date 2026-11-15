@@ -8869,10 +8869,13 @@ public class Main extends XposedModule {
         // beside the controls.
         float lyricsInset = LyricsButton.update(card, lyricsButton || canvasLyrics, canvasLyrics,
                 lyricsButton && !fullScreenLyrics && LockLyrics.wantsCompactArtwork());
-        alignCardTextLeft(card, (TextView) sCardTitle, hideP, lyricsInset);
+        float normalTitleShift = alignCardTextLeft(card, (TextView) sCardTitle, hideP, lyricsInset);
         alignCardTextLeft(card, (TextView) sCardArtist, hideP, lyricsInset);
-        LyricsButton.place(card, (TextView) sCardTitle, (TextView) sCardArtist, sCardArt,
-                hideP >= 0.999f);
+        float iconUndo = 0f;
+        if (hideP >= 0.999f && sCardTitle != null) {
+            iconUndo = sCardTitle.getTranslationX() - normalTitleShift;
+        }
+        LyricsButton.place(card, (TextView) sCardTitle, (TextView) sCardArtist, sCardArt, iconUndo);
         applyTitleTap((TextView) sCardTitle, sMcTitleTap && sCoverMode && onKeyguard);
         if (onKeyguard && !sCardForced) sampleCardRect(card, p);
         MediaCardRuntime.afterCardPass(card);
@@ -9045,16 +9048,16 @@ public class Main extends XposedModule {
     }
 
     /** Move the drawn text into the hidden thumbnail's slot without rewriting OEM constraints. */
-    private static void alignCardTextLeft(View card, TextView text, float progress, float lyricsInset) {
-        if (text == null) return;
+    private static float alignCardTextLeft(View card, TextView text, float progress, float lyricsInset) {
+        if (text == null) return 0f;
         if (progress <= 0f && lyricsInset <= 0f) {
             if (text.getTranslationX() != 0f) text.setTranslationX(0f);
-            return;
+            return lyricsInset;
         }
         Layout layout = text.getLayout();
-        if (layout == null || layout.getLineCount() == 0) return;
+        if (layout == null || layout.getLineCount() == 0) return 0f;
         float textLeft = leftWithinCard(card, text);
-        if (Float.isNaN(textLeft)) return;
+        if (Float.isNaN(textLeft)) return 0f;
         // Lyrics up = the thumbnail is gone: the two lines are centred across the card instead of
         // hugging the edge it left behind (2026-11-15, user: the original centres them). Past the
         // end of the slide only - short of it the text is still travelling with the artwork.
@@ -9064,7 +9067,7 @@ public class Main extends XposedModule {
             float target = (card.getPaddingLeft() + card.getWidth() - card.getPaddingRight()) / 2f;
             float dx = (target - inkCenter) + lyricsInset;
             if (text.getTranslationX() != dx) text.setTranslationX(dx);
-            return;
+            return (startOf(card) - inkCenter) + lyricsInset;
         }
         float start = leftWithinCard(card, sCardArt);
         if (Float.isNaN(start)) {
@@ -9074,6 +9077,16 @@ public class Main extends XposedModule {
         float inkLeft = textLeft + text.getPaddingLeft() + layout.getLineLeft(0);
         float dx = (start - inkLeft) * progress + lyricsInset;
         if (text.getTranslationX() != dx) text.setTranslationX(dx);
+        return (start - inkLeft) + lyricsInset;
+    }
+
+    /** Where the card's text would start with the thumbnail showing. */
+    private static float startOf(View card) {
+        float start = leftWithinCard(card, sCardArt);
+        if (Float.isNaN(start)) {
+            start = card.getPaddingLeft() + 24f * card.getResources().getDisplayMetrics().density;
+        }
+        return Math.max(card.getPaddingLeft(), start);
     }
 
     /** Untranslated layout coordinates also work when the OEM nests the text or artwork. */

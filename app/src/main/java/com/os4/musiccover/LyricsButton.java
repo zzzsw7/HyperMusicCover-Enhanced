@@ -166,19 +166,18 @@ final class LyricsButton {
     }
 
     /**
-     * [centred] is the card with the lyrics up: the song's two lines are centred across it, so
-     * following the title would drag this button to the middle with them. Anchored to the
-     * artwork's own place instead, which is where it has always rested (2026-11-15, user).
+     * [undoShift] is how far the title has been moved by the centred layout: subtracted here so
+     * this button stays in the place it has always rested in (2026-11-15, user: it followed the
+     * title into the middle, and anchoring it to the hidden artwork put it off screen).
      */
-    static void place(View card, TextView title, TextView artist, View artwork, boolean centred) {
+    static void place(View card, TextView title, TextView artist, View artwork, float undoShift) {
         if (button == null || host != card || title == null || progress <= 0f || gone()) return;
         Layout layout = title.getLayout();
         if (layout == null || layout.getLineCount() == 0) return;
         float density = card.getResources().getDisplayMetrics().density;
         int size = Math.round(SIZE_DP * density);
-        float titleX = centred && artwork != null
-                ? position(card, artwork, true)
-                : position(card, title, true) + title.getPaddingLeft() + layout.getLineLeft(0);
+        float titleX = position(card, title, true) - undoShift
+                + title.getPaddingLeft() + layout.getLineLeft(0);
         float top = position(card, title, false);
         float bottom = artist != null && artist.isShown()
                 ? position(card, artist, false) + artist.getHeight() : top + title.getHeight();
