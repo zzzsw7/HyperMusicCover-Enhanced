@@ -166,17 +166,18 @@ final class LyricsButton {
     }
 
     /**
-     * [undoShift] is how far the title has been moved by the centred layout: subtracted here so
-     * this button stays in the place it has always rested in (2026-11-15, user: it followed the
-     * title into the middle, and anchoring it to the hidden artwork put it off screen).
+     * [centred] is the card with the lyrics up. The two lines are centred across it, so following
+     * the title would drag this button to the middle with them; it stays in the thumbnail's own
+     * slot instead - the middle of where the artwork was, which is where it has always rested
+     * (2026-11-15, user).
      */
-    static void place(View card, TextView title, TextView artist, View artwork, float undoShift) {
+    static void place(View card, TextView title, TextView artist, View artwork, boolean centred) {
         if (button == null || host != card || title == null || progress <= 0f || gone()) return;
         Layout layout = title.getLayout();
         if (layout == null || layout.getLineCount() == 0) return;
         float density = card.getResources().getDisplayMetrics().density;
         int size = Math.round(SIZE_DP * density);
-        float titleX = position(card, title, true) - undoShift
+        float titleX = position(card, title, true)
                 + title.getPaddingLeft() + layout.getLineLeft(0);
         float top = position(card, title, false);
         float bottom = artist != null && artist.isShown()
@@ -185,6 +186,13 @@ final class LyricsButton {
         // Where it rests whatever the progress: the title is pushed right by the inset update()
         // returns (its share of the progress), and following the title it slid in from the left.
         float left = titleX - (SIZE_DP + GAP_DP) * density * progress * titleShare;
+        if (centred) {
+            float artLeft = artwork == null ? 16f * density : position(card, artwork, true);
+            float artWidth = artwork == null ? size : artwork.getWidth();
+            if (Float.isFinite(artLeft) && artWidth > 0) {
+                left = artLeft + (artWidth - size) / 2f;
+            }
+        }
         float y = (top + bottom - size) / 2f;
         if (!shownBeside) {
             // The cover's spring outlasts the swap: held until the title has reached it, or has

@@ -8869,13 +8869,10 @@ public class Main extends XposedModule {
         // beside the controls.
         float lyricsInset = LyricsButton.update(card, lyricsButton || canvasLyrics, canvasLyrics,
                 lyricsButton && !fullScreenLyrics && LockLyrics.wantsCompactArtwork());
-        float normalTitleShift = alignCardTextLeft(card, (TextView) sCardTitle, hideP, lyricsInset);
+        alignCardTextLeft(card, (TextView) sCardTitle, hideP, lyricsInset);
         alignCardTextLeft(card, (TextView) sCardArtist, hideP, lyricsInset);
-        float iconUndo = 0f;
-        if (hideP >= 0.999f && sCardTitle != null) {
-            iconUndo = sCardTitle.getTranslationX() - normalTitleShift;
-        }
-        LyricsButton.place(card, (TextView) sCardTitle, (TextView) sCardArtist, sCardArt, iconUndo);
+        LyricsButton.place(card, (TextView) sCardTitle, (TextView) sCardArtist, sCardArt,
+                hideP >= 0.999f);
         applyTitleTap((TextView) sCardTitle, sMcTitleTap && sCoverMode && onKeyguard);
         if (onKeyguard && !sCardForced) sampleCardRect(card, p);
         MediaCardRuntime.afterCardPass(card);
