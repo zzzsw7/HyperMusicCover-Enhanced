@@ -7483,10 +7483,44 @@ public class Main extends XposedModule {
      * exit is still running, or out of them while the entry is. Not gated on the scene being
      * off, as a tap on the pill is - it is still settling, and that is the point.
      */
+    /**
+     * Whether HyperExtreme's spatial wallpaper is the layer on screen right now.
+     *
+     * Asked of the module's own system property (same one its renderer publishes) rather than by
+     * package name: `debug.hyperextreme.spatial_active` is 1 exactly while that wallpaper is up,
+     * and every process can read it. Cached for a second - this is asked on gestures, not frames.
+     */
+    private static long sSpatialReadAt;
+    private static boolean sSpatialOn;
+
+    static boolean hyperExtremeSpatialActive() {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - sSpatialReadAt < 1000L) return sSpatialOn;
+        sSpatialReadAt = now;
+        boolean on = false;
+        try {
+            Class<?> sp = Class.forName("android.os.SystemProperties");
+            Object raw = sp.getMethod("get", String.class, String.class)
+                    .invoke(null, "debug.hyperextreme.spatial_active", "0");
+            on = raw instanceof String && "1".equals(((String) raw).trim());
+        } catch (Throwable ignored) {
+            // Hidden API blocked: treat as off, the behaviour stays as it was.
+        }
+        sSpatialOn = on;
+        return on;
+    }
+
     static void miniPlayerTurnScene(boolean enter) {
         if (!keyguardShowing() || bouncerUp()) return;
         if (enter) {
             if (sCoverMode) return;
+            // Spatial wallpaper is the picture here: pulling the island up opens the media card
+            // and nothing else. Entering the cover from a tap still works - that is onLockTap,
+            // which does not come through here (2026-11-15, user).
+            if (hyperExtremeSpatialActive()) {
+                Xp.log(TAG + "spatial wallpaper up: island opens its card, not the cover");
+                return;
+            }
             // Back out of the island mid-morph: the lyrics come out of it too, from where it is.
             LockLyrics.notePopOrigin(MiniPlayerRuntime.musicIslandCentreOnScreen());
             if (!sAuto) setCoverEnabled(true, true, false);
