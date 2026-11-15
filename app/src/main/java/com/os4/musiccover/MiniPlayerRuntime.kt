@@ -11620,7 +11620,7 @@ private class MiniPlayerController(
         // Started now, before a frame shows the new island at its rest width.
         if (updateFrom != null) startUpdate(updateContent, updateFrom)
         prewarmSpares()
-        val keyguardNow = Main.keyguardShowing()
+        val keyguardNow = Main.keyguardUp()
         if (keyguardNow && !wasKeyguard) armedRestore = true
         wasKeyguard = keyguardNow
         maybeRestoreExpanded()

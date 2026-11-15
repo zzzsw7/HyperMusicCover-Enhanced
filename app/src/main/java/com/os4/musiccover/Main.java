@@ -11056,6 +11056,11 @@ public class Main extends XposedModule {
         return sSysLocked;
     }
 
+    /** [keyguardShowing] for the mini player's own bookkeeping (restore once per lock). */
+    static boolean keyguardUp() {
+        return keyguardShowing();
+    }
+
     /**
      * The KeyguardManager's answer. The two keyguard answers disagree: {@link #onKeyguardNow} is
      * the clock container being shown, and the comment above {@link #keyguardShowing} records that
