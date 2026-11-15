@@ -412,6 +412,10 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
     private var toggleGapPx = 0
     private var textRightBase = 0
 
+    /** The text column's margins with the artwork showing and with it put away (centred). */
+    private var textLeftWithArt = 0
+    private var textLeftNoArt = 0
+
     /**
      * Two buttons in the big island, one - its main one - in the middle island: the second comes
      * in or goes as the pill widens or narrows for the small island, on the switch's own curve,
@@ -710,6 +714,24 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
         artworkHidden = hidden
         if (!morphing) slot.alpha = if (hidden) 0f else 1f
         else if (layoutOnly) slot.alpha = if (hidden) 0f else contentAlpha
+        applyTextAlignment()
+    }
+
+    /**
+     * The song's title and artist sit under the artwork while it is up, and centred across the
+     * card once it is put away - which is what the card looks like with the lyrics showing
+     * (2026-11-15, user: the original does this and Enhanced kept them left aligned).
+     */
+    private fun applyTextAlignment() {
+        val lp = textColumn.layoutParams as? LayoutParams ?: return
+        val left = if (artworkHidden) textLeftNoArt else textLeftWithArt
+        if (lp.leftMargin != left) {
+            lp.leftMargin = left
+            textColumn.layoutParams = lp
+        }
+        val gravity = if (artworkHidden) Gravity.CENTER_HORIZONTAL else Gravity.START
+        if (title.gravity != gravity) title.gravity = gravity
+        if (artist.gravity != gravity) artist.gravity = gravity
     }
 
     /**
@@ -1092,10 +1114,13 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
             rightMargin = max(dp(8f * compactScale), verticalPadding) + toggleW + toggleGapPx
         }
         textRightBase = if (toggleShown) toggleW + max(dp(10f * compactScale), verticalPadding) else horizontalPadding
+        textLeftWithArt = horizontalPadding + artworkWidth + max(dp(10f * compactScale), height / 8)
+        textLeftNoArt = horizontalPadding
         textColumn.layoutParams = LayoutParams(-1, -1, Gravity.CENTER_VERTICAL).apply {
-            leftMargin = horizontalPadding + artworkWidth + max(dp(10f * compactScale), height / 8)
+            leftMargin = if (artworkHidden) textLeftNoArt else textLeftWithArt
             rightMargin = textRightBase + ((toggle2W + toggleGapPx) * secondShown).toInt()
         }
+        applyTextAlignment()
         val radius = if (shaped) artworkSize * ART_CORNER_SHARE else artworkSize / 2f
         artworkRadiusPx = radius
         slot.background = if (artworkBare) null else rounded(Color.rgb(55, 55, 55), radius)
