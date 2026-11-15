@@ -7456,6 +7456,15 @@ public class Main extends XposedModule {
     /** Enter through the same route as the OEM artwork, with MiniPlayerRuntime owning the bridge. */
     static void miniPlayerEnterCover() {
         if (!miniPlayerCanShow()) return;
+        // Spatial wallpaper is the picture here: pulling the island up opens the media card and
+        // stops there (2026-11-15, user). This is the path the drag and the pill tap take - see
+        // MiniPlayerRuntime.releaseDrag - so the guard in miniPlayerTurnScene alone was not enough.
+        // Tapping the clock still enters the cover: that is onLockTap, which comes here too but
+        // as a deliberate act on the clock, so it is allowed below via sCoverEntryByClock.
+        if (hyperExtremeSpatialActive() && !sCoverEntryByClock) {
+            Xp.log(TAG + "spatial wallpaper up: the card expands, the cover stays off");
+            return;
+        }
         // Taken before the entry moves anything: the lyrics grow out of the island as it is now.
         LockLyrics.notePopOrigin(MiniPlayerRuntime.musicIslandCentreOnScreen());
         if (!sAuto) {
@@ -7492,6 +7501,9 @@ public class Main extends XposedModule {
      */
     private static long sSpatialReadAt;
     private static boolean sSpatialOn;
+
+    /** Set while the clock's own tap is entering the cover, so the spatial guard lets it through. */
+    private static boolean sCoverEntryByClock;
 
     static boolean hyperExtremeSpatialActive() {
         long now = android.os.SystemClock.uptimeMillis();
@@ -11535,7 +11547,12 @@ public class Main extends XposedModule {
         // above (card showing, not the shade/CC/bouncer, in the band between the status bar and
         // the card) already keep this away from the clock and from the empty lock screen.
         if (!sCoverMode) {
-            enterFromTap("tap at y=" + y);
+            sCoverEntryByClock = true;
+            try {
+                enterFromTap("tap at y=" + y);
+            } finally {
+                sCoverEntryByClock = false;
+            }
             return;
         }
         // No lyrics + the clock owns dismissal: the two gestures split by position.
