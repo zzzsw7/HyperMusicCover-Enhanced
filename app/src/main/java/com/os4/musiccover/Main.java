@@ -9309,6 +9309,15 @@ public class Main extends XposedModule {
                     if (CanvasHostBridge.active()) {
                         LockLyrics.setCanvasLyricsVisible(true, trackKey(sWatched), sWatched);
                     } else LockLyrics.toggleByTap(sTrackKey, sWatched);
+                } else if (sCloseLyriclessCover && sCoverMode && LockLyrics.sEnabled
+                        && !LockLyrics.hasLyrics() && !LockLyrics.wantsAttached()) {
+                    // No lyrics, and the clock has taken over "leave the cover" (see onLockTap):
+                    // the artwork is the blur switch in BOTH directions. Without this a second
+                    // tap on a sharp cover exited it, which left the two gestures fighting over
+                    // the same action.
+                    beginCompactArtworkMorph(false);
+                    FullCoverPop.play(false);
+                    LockLyrics.setArtworkCompact(true);
                 } else if (sCoverMode && LyricsButton.byTitle()) {
                     // The lyrics button by the title rests where the thumbnail was, and is still
                     // sliding there as the cover grows: the whole spot is its switch.
