@@ -11620,6 +11620,9 @@ private class MiniPlayerController(
         // Started now, before a frame shows the new island at its rest width.
         if (updateFrom != null) startUpdate(updateContent, updateFrom)
         prewarmSpares()
+        val keyguardNow = Main.keyguardShowing()
+        if (keyguardNow && !wasKeyguard) armedRestore = true
+        wasKeyguard = keyguardNow
         maybeRestoreExpanded()
     } finally { android.os.Trace.endSection() } }
 
@@ -11632,6 +11635,14 @@ private class MiniPlayerController(
     private var restoreTries = 0
     private var restoreReleased = false
 
+    /**
+     * Restore runs ONCE per lock screen show, not on every refresh: with the memory kept for good,
+     * a loop that re-expanded whenever nothing was out simply fought the user - the card bounced
+     * back the moment it was put away (2026-11-15).
+     */
+    private var armedRestore = false
+    private var wasKeyguard = false
+
     private var restoreLogAt = 0L
 
     private fun restoreLog(message: String) {
@@ -11642,14 +11653,21 @@ private class MiniPlayerController(
     }
 
     private fun maybeRestoreExpanded() {
+        if (!armedRestore) return
         val ctx = Main.sAppCtx ?: return
         val want = MiniPlayerRuntime.rememberedExpanded(ctx)
-        if (want.isNullOrEmpty()) return
+        if (want.isNullOrEmpty()) { armedRestore = false; return }
         val outKey = expandedKey()
         if (outKey != null) {
             // Only one card can be out at a time, so a different one sitting there must go home
             // before the remembered one can come out (2026-11-15). Without this the restore waited
             // for ever behind a music card that had itself just been restored.
+            if (outKey == want) {
+                // Already the card the user left out: there is nothing to do, and staying armed
+                // would put it back the moment they collapse it.
+                armedRestore = false
+                return
+            }
             if (outKey != want) {
                 restoreTries = 0
                 restoreLog("restore: putting " + outKey.takeLast(12) + " away for " + want.takeLast(12))
@@ -11666,6 +11684,7 @@ private class MiniPlayerController(
                 return
             }
             restoreTries = 0
+            armedRestore = false
             Xp.log("MCMini: restoring the music card")
             expandNote(MUSIC_ISLAND)
             return
@@ -11685,6 +11704,7 @@ private class MiniPlayerController(
         }
         restoreTries = 0
         restoreReleased = false
+        armedRestore = false
         Xp.log("MCMini: restoring the expanded card " + want.takeLast(12))
         expandNote(want)
     }
