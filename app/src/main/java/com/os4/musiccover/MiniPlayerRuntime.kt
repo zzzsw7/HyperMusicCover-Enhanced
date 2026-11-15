@@ -11645,9 +11645,17 @@ private class MiniPlayerController(
         val ctx = Main.sAppCtx ?: return
         val want = MiniPlayerRuntime.rememberedExpanded(ctx)
         if (want.isNullOrEmpty()) return
-        if (expandedKey() != null) {
-            restoreTries = 0
-            restoreLog("restore waiting: something is out (" + expandedKey()!!.takeLast(12) + ")")
+        val outKey = expandedKey()
+        if (outKey != null) {
+            // Only one card can be out at a time, so a different one sitting there must go home
+            // before the remembered one can come out (2026-11-15). Without this the restore waited
+            // for ever behind a music card that had itself just been restored.
+            if (outKey != want) {
+                restoreTries = 0
+                restoreLog("restore: putting " + outKey.takeLast(12) + " away for " + want.takeLast(12))
+                preferMini()
+                handler.postDelayed({ scheduleRefresh() }, 300)
+            }
             return
         }
         // The music's "island" is not a released row - it is the constant key the module uses for
