@@ -11504,6 +11504,25 @@ public class Main extends XposedModule {
             enterFromTap("tap at y=" + y);
             return;
         }
+        // No lyrics + the clock owns dismissal: the two gestures split by position.
+        //   clock        -> leave the cover (falls through to exitFromTap below)
+        //   anywhere else -> the blur switch, both ways
+        // Without this the picture had no way back to the blurred card once expanded: the
+        // thumbnail it is tapped from IS the cover at that point, so there is nothing to tap.
+        if (sCloseLyriclessCover && LockLyrics.sEnabled && !LockLyrics.hasLyrics()) {
+            android.graphics.RectF clockBounds = new android.graphics.RectF();
+            boolean onClock = ClockCollapse.clockBoundsOnScreen(clockBounds)
+                    && clockBounds.contains(x, y);
+            if (!onClock) {
+                boolean compactNow = LockLyrics.compactWithoutLyrics();
+                beginCompactArtworkMorph(!compactNow);
+                FullCoverPop.play(!compactNow);
+                LockLyrics.setArtworkCompact(!compactNow);
+                Xp.log(TAG + "tap at y=" + y + ": " + (compactNow ? "expanding" : "compacting")
+                        + " the artwork");
+                return;
+            }
+        }
         boolean fullScreen = effectiveCoverStyle().mode != CoverCardStyle.CARD;
         if (!fullScreen && (LockLyrics.wantsCompactArtwork() || !CoverCardLayer.artworkAt(x, y))) return;
         if (!sCloseLyriclessCover && LockLyrics.sEnabled && !LockLyrics.hasLyrics()) {
