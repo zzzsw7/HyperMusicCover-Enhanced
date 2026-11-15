@@ -9830,8 +9830,9 @@ private class MiniPlayerController(
     private fun releaseNote(toRow: Boolean, velocity: Float) {
         morph?.release(toRow, velocity)
         // The row that was pulled out (or put back) is the user's choice: remember it across locks.
+        // Only the pull OUT is remembered here. The way back is a collapse the keyguard itself
+        // also performs when it is rebuilt, so clearing on it wiped the choice at every lock.
         if (toRow) noteMorphKey?.let { MiniPlayerRuntime.rememberExpanded(it) }
-        else noteMorphKey?.let { MiniPlayerRuntime.rememberExpanded(null) }
         noteMorphKey?.let { turnTo(it, toRow) }
         if (toRow && noteMorphKey == STACK_ISLAND) showStackAsList("turned out")
         // A flight headed out frees its home; headed home, it holds it again.
@@ -11647,6 +11648,18 @@ private class MiniPlayerController(
         if (expandedKey() != null) {
             restoreTries = 0
             restoreLog("restore waiting: something is out (" + expandedKey()!!.takeLast(12) + ")")
+            return
+        }
+        // The music's "island" is not a released row - it is the constant key the module uses for
+        // its own card - so it never passes the check below. Ask for it directly.
+        if (want == MUSIC_ISLAND) {
+            if (++restoreTries <= 20 && player == null) {
+                handler.postDelayed({ scheduleRefresh() }, 300)
+                return
+            }
+            restoreTries = 0
+            Xp.log("MCMini: restoring the music card")
+            expandNote(MUSIC_ISLAND)
             return
         }
         if (rowFor(want) == null) {

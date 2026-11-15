@@ -9064,7 +9064,10 @@ public class Main extends XposedModule {
             float inkCenter = textLeft + text.getPaddingLeft() + layout.getLineLeft(0)
                     + layout.getLineWidth(0) / 2f;
             float target = (card.getPaddingLeft() + card.getWidth() - card.getPaddingRight()) / 2f;
-            float dx = (target - inkCenter) + lyricsInset;
+            // No lyricsInset here: that is the room kept for the lyrics button, and adding it
+            // pushed the lines right of centre by exactly its width (measured 2026-11-15:
+            // ink=404 target=558 left the text at 696 with the inset, 558 without).
+            float dx = target - inkCenter;
             long nowMs = android.os.SystemClock.uptimeMillis();
             if (nowMs - sCardCentreLogAt > 1000L) {
                 sCardCentreLogAt = nowMs;
