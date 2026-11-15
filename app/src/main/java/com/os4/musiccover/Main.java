@@ -11422,31 +11422,45 @@ public class Main extends XposedModule {
      * fraction of the screen rather than a pixel count because it stands in for a measurement
      * this device has simply not taken yet.
      */
+    /**
+     * Diagnostic for "the clock tap does nothing" (2026-11-15). Every early return logs which
+     * guard stopped it, so one reproduction names the cause instead of guessing.
+     * Rate-limited: this path runs on every lock screen tap.
+     */
+    private static void tapBlocked(String why) {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - sTapBlockLogAt < 800L) return;
+        sTapBlockLogAt = now;
+        Xp.log(TAG + "tap blocked: " + why);
+    }
+
+    private static long sTapBlockLogAt;
+
     private static void onLockTap(float x, float y) {
-        if (!singleCoverTapEnabled()) return;
+        if (!singleCoverTapEnabled()) { tapBlocked("tap switch off"); return; }
         // Background-only Canvas opens solely from the player artwork.
-        if (!sCoverMode && CanvasHostBridge.backgroundOnly()) return;
-        if (!screenOn() || !keyguardShowing()) return;
+        if (!sCoverMode && CanvasHostBridge.backgroundOnly()) { tapBlocked("canvas background-only"); return; }
+        if (!screenOn() || !keyguardShowing()) { tapBlocked("screen off or not keyguard"); return; }
         // Only the keyguard shows the clock container, so this is also what rules out the shade
         // being pulled down over an unlocked phone - the same test the card restyle uses.
         View c = sContainer;
-        if (c == null || !c.isShown()) return;
+        if (c == null || !c.isShown()) { tapBlocked("clock container hidden"); return; }
         // The pad is up, so the taps on it are its own.
-        if (bouncerUp()) return;
+        if (bouncerUp()) { tapBlocked("bouncer up"); return; }
         // The control centre covers the same region without hiding the clock, so none of the
         // guards above see it: a tap aimed at a quick toggle must not toggle the cover.
-        if (controlCenterUp()) return;
+        if (controlCenterUp()) { tapBlocked("control centre up"); return; }
         // And the charging animation, which is a full-screen view over the same region. This is
         // the second half of the pair - a tap that began before the animation was up is caught
         // here, one that began under it was caught at the DOWN.
-        if (chargeAnimUp()) return;
+        if (chargeAnimUp()) { tapBlocked("charge animation up"); return; }
         // Nothing to toggle without music: the card is the switch, and this only chooses
         // whether the cover follows it.
-        if (!sCardKnown || !sCardShowing) return;
+        if (!sCardKnown || !sCardShowing) { tapBlocked("no media card known=" + sCardKnown + " showing=" + sCardShowing); return; }
         // An immersive page is the picture here, not the cover: a tap on it is a tap on the
         // page, and it put the cover and its card up over the map (user, 2026-09-29). The page
         // is left by its island, as it was opened.
-        if (ImmersiveHost.holdsClock()) return;
+        if (ImmersiveHost.holdsClock()) { tapBlocked("immersive page holds the clock"); return; }
         float top = sScreenH * 0.08f;
         // Measured live where possible. The sampled rectangle is a settled reading taken for
         // the app's preview and it lags: seen at 1360 while the card was actually at 1700,
@@ -11465,7 +11479,7 @@ public class Main extends XposedModule {
         // behind it (filmed 2026-10-22).
         float notes = MiniPlayerRuntime.stackContentTop();
         if (!Float.isNaN(notes)) bottom = Math.min(bottom, notes);
-        if (y < top || y > bottom) return;
+        if (y < top || y > bottom) { tapBlocked("y=" + y + " outside band " + top + ".." + bottom); return; }
         // A tap acts on a thing, not on the lock screen: on the big cover's own square, never on
         // the clock, the lyrics or the empty wallpaper - with the cover off, the wallpaper put
         // the cover up wherever it was touched, and in it the lyrics took the cover down (the
