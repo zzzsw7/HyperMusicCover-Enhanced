@@ -62,6 +62,20 @@ object MiniPlayerRuntime {
 
     @JvmStatic fun configJson(context: Context): String = MiniPlayerConfig.fromPreferences(prefs(context))
 
+    // ── 展开状态记忆（2026-11-15，用户要求）──────────────────────────────
+    // 哪一个岛是展开的，持久化到 hmc_mini：手动展开写下来，手动收起清掉。
+    // 锁屏重建后 refresh 会发现这个键、行还在、而又没有别的展开着，就把它重新打开。
+    // 只在"手动收起"时清除 ⇒ 换歌、锁屏、重启手机都保持用户最后一次的选择。
+    private const val PREF_EXPANDED = "expanded_key"
+
+    /** 记下用户最后一次展开的卡片；null = 用户手动收起，之后不再自动展开。 */
+    @JvmStatic fun rememberExpanded(key: String?) {
+        val ctx = Main.sAppCtx ?: return
+        val p = prefs(ctx)
+        if (key.isNullOrEmpty()) p.edit().remove(PREF_EXPANDED).apply()
+        else p.edit().putString(PREF_EXPANDED, key).apply()
+    }
+
     /** Only automatic cover entry changes; manual entry and existing scenes stay intact. */
     @JvmStatic fun mediaCollapsedByDefault(context: Context?): Boolean =
         context != null && MiniPlayerConfig.mediaCollapsedByDefault(
@@ -9287,6 +9301,7 @@ private class MiniPlayerController(
         // Opened, the stack island leads with its newest notification, the one it shows.
         if (key == STACK_ISLAND) stackLeadKey = null
         noteMorphKey = key
+        rememberExpanded(key)
         flightFromSmall = fromSmall
         flightHome = if (fromSmall) HOME_SMALL else HOME_PILL
         flightOut = false
@@ -11249,6 +11264,8 @@ private class MiniPlayerController(
 
     /** The lift: the choice follows where the container is going, then the springs. */
     fun releaseDrag(toNative: Boolean, velocity: Float) {
+        // Pulled back down into the island: the user asked for it shut, so stop restoring it.
+        if (!toNative) rememberExpanded(null)
         if (noteMorphKey != null) {
             releaseNote(toNative, velocity)
             return
@@ -11594,7 +11611,31 @@ private class MiniPlayerController(
         // Started now, before a frame shows the new island at its rest width.
         if (updateFrom != null) startUpdate(updateContent, updateFrom)
         prewarmSpares()
+        maybeRestoreExpanded()
     } finally { android.os.Trace.endSection() } }
+
+    /**
+     * Re-opens the card the user last left expanded (2026-11-15).
+     *
+     * Called at the end of every refresh: cheap, and it only acts when the remembered row exists,
+     * nothing else is out, and the user has not collapsed it since (that clears the key).
+     */
+    private var restoreTries = 0
+
+    private fun maybeRestoreExpanded() {
+        val ctx = Main.sAppCtx ?: return
+        val want = prefs(ctx).getString(PREF_EXPANDED, null)
+        if (want.isNullOrEmpty()) return
+        if (expandedKey() != null) { restoreTries = 0; return }
+        if (rowFor(want) == null) {
+            if (++restoreTries <= 8) handler.postDelayed({ scheduleRefresh() }, 300)
+            else restoreTries = 0
+            return
+        }
+        restoreTries = 0
+        Xp.log("MCMini: restoring the expanded card " + want.takeLast(12))
+        expandNote(want)
+    }
 
     /** The session and track the music island is showing; a new one starts its artwork afresh. */
     private fun trackMusic(current: MediaController) {
