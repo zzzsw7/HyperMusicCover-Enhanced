@@ -9045,6 +9045,8 @@ public class Main extends XposedModule {
     }
 
     /** Move the drawn text into the hidden thumbnail's slot without rewriting OEM constraints. */
+    private static long sCardCentreLogAt;
+
     private static float alignCardTextLeft(View card, TextView text, float progress, float lyricsInset) {
         if (text == null) return 0f;
         if (progress <= 0f && lyricsInset <= 0f) {
@@ -9063,6 +9065,15 @@ public class Main extends XposedModule {
                     + layout.getLineWidth(0) / 2f;
             float target = (card.getPaddingLeft() + card.getWidth() - card.getPaddingRight()) / 2f;
             float dx = (target - inkCenter) + lyricsInset;
+            long nowMs = android.os.SystemClock.uptimeMillis();
+            if (nowMs - sCardCentreLogAt > 1000L) {
+                sCardCentreLogAt = nowMs;
+                Xp.log(TAG + "card centre: cardW=" + card.getWidth()
+                        + " pad=" + card.getPaddingLeft() + "/" + card.getPaddingRight()
+                        + " textLeft=" + textLeft + " lineLeft=" + layout.getLineLeft(0)
+                        + " lineW=" + layout.getLineWidth(0) + " ink=" + inkCenter
+                        + " target=" + target + " dx=" + dx + " tx=" + text.getTranslationX());
+            }
             if (text.getTranslationX() != dx) text.setTranslationX(dx);
             return (startOf(card) - inkCenter) + lyricsInset;
         }

@@ -9829,6 +9829,9 @@ private class MiniPlayerController(
     /** A notification's morph, let go by a finger that caught it: to its row or its island. */
     private fun releaseNote(toRow: Boolean, velocity: Float) {
         morph?.release(toRow, velocity)
+        // The row that was pulled out (or put back) is the user's choice: remember it across locks.
+        if (toRow) noteMorphKey?.let { MiniPlayerRuntime.rememberExpanded(it) }
+        else noteMorphKey?.let { MiniPlayerRuntime.rememberExpanded(null) }
         noteMorphKey?.let { turnTo(it, toRow) }
         if (toRow && noteMorphKey == STACK_ISLAND) showStackAsList("turned out")
         // A flight headed out frees its home; headed home, it holds it again.
