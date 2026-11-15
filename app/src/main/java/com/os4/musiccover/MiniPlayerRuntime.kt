@@ -76,6 +76,10 @@ object MiniPlayerRuntime {
         else p.edit().putString(PREF_EXPANDED, key).apply()
     }
 
+    /** The card the user last left expanded, or null when they collapsed everything. */
+    @JvmStatic fun rememberedExpanded(context: Context): String? =
+        prefs(context).getString(PREF_EXPANDED, null)
+
     /** Only automatic cover entry changes; manual entry and existing scenes stay intact. */
     @JvmStatic fun mediaCollapsedByDefault(context: Context?): Boolean =
         context != null && MiniPlayerConfig.mediaCollapsedByDefault(
@@ -9301,7 +9305,7 @@ private class MiniPlayerController(
         // Opened, the stack island leads with its newest notification, the one it shows.
         if (key == STACK_ISLAND) stackLeadKey = null
         noteMorphKey = key
-        rememberExpanded(key)
+        MiniPlayerRuntime.rememberExpanded(key)
         flightFromSmall = fromSmall
         flightHome = if (fromSmall) HOME_SMALL else HOME_PILL
         flightOut = false
@@ -11265,7 +11269,7 @@ private class MiniPlayerController(
     /** The lift: the choice follows where the container is going, then the springs. */
     fun releaseDrag(toNative: Boolean, velocity: Float) {
         // Pulled back down into the island: the user asked for it shut, so stop restoring it.
-        if (!toNative) rememberExpanded(null)
+        if (!toNative) MiniPlayerRuntime.rememberExpanded(null)
         if (noteMorphKey != null) {
             releaseNote(toNative, velocity)
             return
@@ -11624,7 +11628,7 @@ private class MiniPlayerController(
 
     private fun maybeRestoreExpanded() {
         val ctx = Main.sAppCtx ?: return
-        val want = prefs(ctx).getString(PREF_EXPANDED, null)
+        val want = MiniPlayerRuntime.rememberedExpanded(ctx)
         if (want.isNullOrEmpty()) return
         if (expandedKey() != null) { restoreTries = 0; return }
         if (rowFor(want) == null) {
