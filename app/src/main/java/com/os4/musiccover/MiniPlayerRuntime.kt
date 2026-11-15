@@ -74,6 +74,7 @@ object MiniPlayerRuntime {
         val p = prefs(ctx)
         if (key.isNullOrEmpty()) p.edit().remove(PREF_EXPANDED).apply()
         else p.edit().putString(PREF_EXPANDED, key).apply()
+        Xp.log("MCMini: remembered expanded card = " + (key?.takeLast(12) ?: "none"))
     }
 
     /** The card the user last left expanded, or null when they collapsed everything. */
@@ -11626,14 +11627,29 @@ private class MiniPlayerController(
      */
     private var restoreTries = 0
 
+    private var restoreLogAt = 0L
+
+    private fun restoreLog(message: String) {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - restoreLogAt < 1000L) return
+        restoreLogAt = now
+        Xp.log("MCMini: " + message)
+    }
+
     private fun maybeRestoreExpanded() {
         val ctx = Main.sAppCtx ?: return
         val want = MiniPlayerRuntime.rememberedExpanded(ctx)
         if (want.isNullOrEmpty()) return
-        if (expandedKey() != null) { restoreTries = 0; return }
+        if (expandedKey() != null) {
+            restoreTries = 0
+            restoreLog("restore waiting: something is out (" + expandedKey()!!.takeLast(12) + ")")
+            return
+        }
         if (rowFor(want) == null) {
-            if (++restoreTries <= 8) handler.postDelayed({ scheduleRefresh() }, 300)
+            if (++restoreTries <= 20) handler.postDelayed({ scheduleRefresh() }, 300)
             else restoreTries = 0
+            restoreLog("restore: row " + want.takeLast(12) + " missing (try " + restoreTries
+                    + ") have=" + LockIslands.releasedKeys().joinToString(",") { it.takeLast(10) })
             return
         }
         restoreTries = 0

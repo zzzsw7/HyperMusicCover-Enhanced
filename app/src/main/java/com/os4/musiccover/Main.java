@@ -9054,6 +9054,17 @@ public class Main extends XposedModule {
         if (layout == null || layout.getLineCount() == 0) return;
         float textLeft = leftWithinCard(card, text);
         if (Float.isNaN(textLeft)) return;
+        // Lyrics up = the thumbnail is gone: the two lines are centred across the card instead of
+        // hugging the edge it left behind (2026-11-15, user: the original centres them). Past the
+        // end of the slide only - short of it the text is still travelling with the artwork.
+        if (progress >= 0.999f) {
+            float inkCenter = textLeft + text.getPaddingLeft() + layout.getLineLeft(0)
+                    + layout.getLineWidth(0) / 2f;
+            float target = (card.getPaddingLeft() + card.getWidth() - card.getPaddingRight()) / 2f;
+            float dx = (target - inkCenter) + lyricsInset;
+            if (text.getTranslationX() != dx) text.setTranslationX(dx);
+            return;
+        }
         float start = leftWithinCard(card, sCardArt);
         if (Float.isNaN(start)) {
             start = card.getPaddingLeft() + 24f * card.getResources().getDisplayMetrics().density;
