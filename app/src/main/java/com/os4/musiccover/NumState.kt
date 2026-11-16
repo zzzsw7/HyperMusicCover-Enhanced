@@ -120,6 +120,32 @@ internal object NumState {
             }
 
         }.onFailure { Xp.log("MCNum: artwork motion hooks unavailable: $it") }
+        // The finger on the stack itself: where it was let go is the state the user is leaving,
+        // taken before the stack's spring runs the rest of the way (2026-11-16).
+        runCatching {
+            val stack = Xp.findClass("com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout", classLoader)
+            Xp.hookAll(stack, "onTouchEvent") { chain ->
+                val ev = chain.args.firstOrNull() as? android.view.MotionEvent
+                val result = chain.proceed()
+                if (ev != null && (ev.actionMasked == android.view.MotionEvent.ACTION_UP ||
+                        ev.actionMasked == android.view.MotionEvent.ACTION_CANCEL)) {
+                    runCatching { noteTouchEnd(ev.actionMasked == android.view.MotionEvent.ACTION_CANCEL) }
+                }
+                result
+            }
+        }.onFailure { Xp.log("MCNum: stack touch hook unavailable: $it") }
+    }
+
+    /** The finger left the stack: folded at the count's place, or left up as the list. */
+    private fun noteTouchEnd(cancelled: Boolean) {
+        if (!folding || cancelled) return
+        val at = scrollY() ?: return
+        val number = scrollTo("NUMBER") ?: return
+        val folded = at <= number + 24
+        suppressUntil = SystemClock.uptimeMillis() + 2500L
+        Xp.log("MCNum: touch end scroll=" + at + " number=" + number
+            + " -> " + (if (folded) "folded" else "opened"))
+        writeMemory(!folded, force = true)
     }
 
     fun addListener(l: (Boolean) -> Unit) { listeners.addIfAbsent(l) }
