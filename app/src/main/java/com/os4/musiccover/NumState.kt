@@ -95,6 +95,7 @@ internal object NumState {
                 // The finger has just been lifted: whatever it landed on is what the user is
                 // leaving the lock screen in, written before the animation's own transitions.
                 runCatching { noteGesture(info, out, chain.thisObject) }
+                runCatching { sampleHandsUp(info, chain.thisObject, landing, out) }
                 out
             }
         }.onFailure { Xp.log("MCNum: hands-up unhookable: $it") }
@@ -217,6 +218,26 @@ internal object NumState {
 
     @Volatile private var lastOpenedAt = 0L
 
+
+    /**
+     * Read-only: the raw numbers a hands-up gives, so the fold's own target can be told from the
+     * list's by measurement instead of by guess (2026-11-16). Nothing here moves the stack.
+     */
+    private fun sampleHandsUp(info: Any?, model: Any, landing: Float, out: Float) {
+        if (info == null) return
+        val event = (Xp.getObjectField(info, "stackShowEvent") as? Enum<*>)?.name
+        if (event == null) return
+        fun target(name: String): Float? = runCatching {
+            val factory = Xp.getObjectField(Xp.getObjectField(model, "\$delegate_0"), "strategyFactory")
+            val strategy = Xp.callMethod(Xp.getObjectField(factory, name), "get")
+            (Xp.callMethod(strategy, "calculateTargetYPosition", info) as Number).toFloat()
+        }.getOrNull()
+        Xp.log("MCNum: sample event=" + event + " landing=" + landing + " out=" + out
+            + " number=" + target("numberStrategy") + " stack=" + target("stackStrategy")
+            + " isNumber=" + Xp.getObjectField(info, "isNumberState")
+            + " over=" + overScroll() + " scroll=" + scrollY() + " spread="
+            + LockIslands.spreadingNow() + " fold=" + MiniPlayerRuntime.spreadFolding())
+    }
 
     /** The module's own list gesture has ended: folded home, or left open as the list. */
     fun noteSpreadEnd(folded: Boolean) {
