@@ -148,12 +148,25 @@ internal object NumState {
     private fun remember(open: Boolean) {
         if (SystemClock.uptimeMillis() < suppressUntil) return
         val ctx = Main.sAppCtx ?: return
+        val now = SystemClock.uptimeMillis()
+        if (open) {
+            lastOpenedAt = now
+        } else if (recentlyOpened()) {
+            // The module's own settling after an open, not a fold the user asked for.
+            return
+        }
         val p = ctx.getSharedPreferences("hmc_mini", android.content.Context.MODE_PRIVATE)
         if (p.getBoolean(PREF_OPEN, false) != open) {
             p.edit().putBoolean(PREF_OPEN, open).apply()
             trace(if (open) "remembered: opened" else "remembered: folded")
         }
     }
+
+    /** The stack was opened by the user a moment ago: an automatic fold right after it is not theirs. */
+    private fun recentlyOpened(): Boolean =
+        lastOpenedAt != 0L && SystemClock.uptimeMillis() - lastOpenedAt < 4000L
+
+    @Volatile private var lastOpenedAt = 0L
 
     private fun handsUp(model: Any, info: Any?, target: Float): Float? {
         if (!folding || info == null || !LockIslands.foldsToCount()) return null
@@ -180,6 +193,13 @@ internal object NumState {
         // pile does, and a swipe up from the media card folded straight back (2026-10-24).
         if (MiniPlayerRuntime.stackSwipedUp) {
             trace("hands up at the pile after a swipe up: left open ($target)")
+            return null
+        }
+        // The user left the stack open by hand: a hands-up that lands on the pile must not fold
+        // it back into the island behind their back (2026-11-16). Only the settling right after
+        // the open - a fold asked for later is the user's own.
+        if (recentlyOpened()) {
+            trace("hands up at the pile: left open (just opened by the user)")
             return null
         }
         val number = number()
