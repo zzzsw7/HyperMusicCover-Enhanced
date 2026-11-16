@@ -186,7 +186,7 @@ internal object NumState {
 
     /** The stack was opened by the user a moment ago: an automatic fold right after it is not theirs. */
     private fun recentlyOpened(): Boolean =
-        lastOpenedAt != 0L && SystemClock.uptimeMillis() - lastOpenedAt < 4000L
+        lastOpenedAt != 0L && SystemClock.uptimeMillis() - lastOpenedAt < 2500L
 
     @Volatile private var lastOpenedAt = 0L
 
@@ -235,9 +235,12 @@ internal object NumState {
         // Only when the module itself just opened the stack (a restore): a pile the user opened
         // by hand must fold when they pull it home - the broad guard left it stuck open
         // (2026-11-16).
-        if (recentlyModuleOpened()) {
-            trace("hands up at the pile: left open (the module just opened it)")
-            Xp.log("MCNum: hands up left open (the module just opened it)")
+        // Right after an open the stack's own settle fires a hands-up that would fold it back
+        // into the island: that is not the user's fold, so it is left open. A fold asked for a
+        // moment later is theirs (the window is 2.5 s).
+        if (recentlyOpened()) {
+            trace("hands up at the pile: left open (just opened)")
+            Xp.log("MCNum: hands up left open (just opened)")
             return null
         }
         val number = number()
