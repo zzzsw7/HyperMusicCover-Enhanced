@@ -479,10 +479,20 @@ internal object NumState {
         if (LockIslands.spreadingNow()) { trace("pile check skipped: spread ($foldWhy)"); return@Runnable }
         if (busy()) { foldIfPiled(foldWhy); return@Runnable }
         if (state() == "STACK") {
-            // Its own folding is not the user's choice: the stack comes up as they left it.
-            suppressRemembering()
-            if (rememberedOpen()) goTo("LIST", anim = true, why = "remembered open ($foldWhy)")
-            else goTo("NUMBER", anim = true, why = "piled ($foldWhy)")
+            // Folded home by the user is their choice and is remembered; the module's own folding
+            // (the row showing, notifications changing) is not, and leaves the memory alone.
+            when {
+                foldWhy == "spread folded" ->
+                    goTo("NUMBER", anim = true, why = "piled ($foldWhy)")
+                rememberedOpen() -> {
+                    suppressRemembering()
+                    goTo("LIST", anim = true, why = "remembered open ($foldWhy)")
+                }
+                else -> {
+                    suppressRemembering()
+                    goTo("NUMBER", anim = true, why = "piled ($foldWhy)")
+                }
+            }
         }
     }
 
