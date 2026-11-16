@@ -88,8 +88,14 @@ internal object NumState {
         runCatching {
             Xp.hookAll(vmClass, "switchStackStatus") { chain ->
                 val target = chain.proceed()
-                runCatching { handsUp(chain.thisObject, chain.args.firstOrNull(), target as Float) }
-                    .getOrNull() ?: target
+                val info = chain.args.firstOrNull()
+                val landing = target as Float
+                val out: Float = runCatching { handsUp(chain.thisObject, info, landing) }
+                    .getOrNull() ?: landing
+                // The finger has just been lifted: whatever it landed on is what the user is
+                // leaving the lock screen in, written before the animation's own transitions.
+                runCatching { noteGesture(info, out, chain.thisObject) }
+                out
             }
         }.onFailure { Xp.log("MCNum: hands-up unhookable: $it") }
         // Wake on actual native scrolling, including STACK <-> LIST without number-state callbacks.
@@ -161,6 +167,8 @@ internal object NumState {
     private var pendingOpen: Boolean? = null
 
     private fun scheduleRemember(open: Boolean) {
+        // A gesture has just written the user's choice: its animation must not write over it.
+        if (SystemClock.uptimeMillis() < suppressUntil) return
         pendingOpen = open
         val gen = ++rememberGen
         main.removeCallbacks(rememberRun)
@@ -169,6 +177,7 @@ internal object NumState {
 
     private val rememberRun = Runnable {
         val open = pendingOpen ?: return@Runnable
+        if (SystemClock.uptimeMillis() < suppressUntil) return@Runnable
         if (!Main.keyguardUp() || !Main.screenOn()) return@Runnable
         writeMemory(open)
     }
@@ -186,7 +195,8 @@ internal object NumState {
     }
 
     /** Writes the memory (and puts the wake's default where the user left the stack). */
-    private fun writeMemory(open: Boolean) {
+    private fun writeMemory(open: Boolean, force: Boolean = false) {
+        if (!force && SystemClock.uptimeMillis() < suppressUntil) return
         val ctx = Main.sAppCtx ?: return
         val p = ctx.getSharedPreferences("hmc_mini", android.content.Context.MODE_PRIVATE)
         if (p.getBoolean(PREF_OPEN, false) != open) {
@@ -207,6 +217,32 @@ internal object NumState {
 
     @Volatile private var lastOpenedAt = 0L
 
+
+    /**
+     * The finger let go of the stack: folded (the capsule) or opened (the list). The stack's own
+     * hands-up target is its landing scroll, so the fold is told by where it lands against the
+     * number state's target - with a tolerance, the two are not the same float - and by the
+     * module's own fold gesture when its row was the one spread out (2026-11-16).
+     */
+    private fun noteGesture(info: Any?, target: Float, model: Any) {
+        if (!folding || info == null) return
+        val event = (Xp.getObjectField(info, "stackShowEvent") as? Enum<*>)?.name
+        if (event != "HANDS_UP") return
+        if (Xp.getObjectField(info, "isNumberState") == true) return
+        val number = runCatching {
+            val factory = Xp.getObjectField(Xp.getObjectField(model, "\$delegate_0"), "strategyFactory")
+            val strategy = Xp.callMethod(Xp.getObjectField(factory, "numberStrategy"), "get")
+            (Xp.callMethod(strategy, "calculateTargetYPosition", info) as Number).toFloat()
+        }.getOrNull()
+        val bySpread = LockIslands.spreadingNow() && MiniPlayerRuntime.spreadFolding()
+        // Landing at (or below) the folded stack's own place: folded. Anything further up is the
+        // list being left open.
+        val folded = bySpread || (number != null && target <= number + 24f)
+        Xp.log("MCNum: gesture target=" + target + " number=" + number + " spread=" + bySpread
+            + " -> " + (if (folded) "folded" else "opened"))
+        suppressUntil = SystemClock.uptimeMillis() + 2500L
+        writeMemory(!folded, force = true)
+    }
 
     private fun handsUp(model: Any, info: Any?, target: Float): Float? {
         if (!folding || info == null || !LockIslands.foldsToCount()) return null
