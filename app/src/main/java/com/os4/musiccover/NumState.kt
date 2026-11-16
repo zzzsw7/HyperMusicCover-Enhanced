@@ -95,7 +95,6 @@ internal object NumState {
                 // The finger has just been lifted: whatever it landed on is what the user is
                 // leaving the lock screen in, written before the animation's own transitions.
                 runCatching { noteGesture(info, out, chain.thisObject) }
-                runCatching { sampleHandsUp(info, chain.thisObject, landing, out) }
                 out
             }
         }.onFailure { Xp.log("MCNum: hands-up unhookable: $it") }
@@ -167,18 +166,13 @@ internal object NumState {
     private var rememberGen = 0
     private var pendingOpen: Boolean? = null
 
-    /**
-     * A change in the stack is taken at once - a fold then a quick lock must not wait for the
-     * animation to finish - and the burst that follows it is not written over it, so the
-     * wake's own folds and opens cannot undo what the user just chose (2026-11-16).
-     */
     private fun scheduleRemember(open: Boolean) {
-        if (!Main.keyguardUp() || !Main.screenOn()) return
-        // A fold always counts: the burst after it is what gets held back, not the fold itself.
-        // An open is held back, so the settle the wake makes cannot undo a fold just made.
-        if (open && SystemClock.uptimeMillis() < suppressUntil) return
-        suppressUntil = SystemClock.uptimeMillis() + 2000L
-        writeMemory(open)
+        // A gesture has just written the user's choice: its animation must not write over it.
+        if (SystemClock.uptimeMillis() < suppressUntil) return
+        pendingOpen = open
+        val gen = ++rememberGen
+        main.removeCallbacks(rememberRun)
+        main.postDelayed({ if (gen == rememberGen) rememberRun.run() }, 1200L)
     }
 
     private val rememberRun = Runnable {
@@ -224,30 +218,10 @@ internal object NumState {
     @Volatile private var lastOpenedAt = 0L
 
 
-    /**
-     * Read-only: the raw numbers a hands-up gives, so the fold's own target can be told from the
-     * list's by measurement instead of by guess (2026-11-16). Nothing here moves the stack.
-     */
-    private fun sampleHandsUp(info: Any?, model: Any, landing: Float, out: Float) {
-        if (info == null) return
-        val event = (Xp.getObjectField(info, "stackShowEvent") as? Enum<*>)?.name
-        if (event == null) return
-        fun target(name: String): Float? = runCatching {
-            val factory = Xp.getObjectField(Xp.getObjectField(model, "\$delegate_0"), "strategyFactory")
-            val strategy = Xp.callMethod(Xp.getObjectField(factory, name), "get")
-            (Xp.callMethod(strategy, "calculateTargetYPosition", info) as Number).toFloat()
-        }.getOrNull()
-        Xp.log("MCNum: sample event=" + event + " landing=" + landing + " out=" + out
-            + " number=" + target("numberStrategy") + " stack=" + target("stackStrategy")
-            + " isNumber=" + Xp.getObjectField(info, "isNumberState")
-            + " over=" + overScroll() + " scroll=" + scrollY() + " spread="
-            + LockIslands.spreadingNow() + " fold=" + MiniPlayerRuntime.spreadFolding())
-    }
-
     /** The module's own list gesture has ended: folded home, or left open as the list. */
     fun noteSpreadEnd(folded: Boolean) {
         if (!folding) return
-        suppressUntil = SystemClock.uptimeMillis() + 4000L
+        suppressUntil = SystemClock.uptimeMillis() + 2500L
         Xp.log("MCNum: spread end -> " + (if (folded) "folded" else "opened"))
         writeMemory(!folded, force = true)
     }
