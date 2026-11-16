@@ -9039,9 +9039,6 @@ private class MiniPlayerController(
         s.finger = null
         s.still = 0
         s.nudged = false
-        // The finger's choice is made here, before the spring runs: remembered now, a lock made
-        // before the animation ends keeps the fold (2026-11-16).
-        NumState.noteSpreadEnd(folded = !f.toList && !s.toStack)
         NumState.goTo(if (s.toStack) "STACK" else if (f.toList) "LIST" else "NUMBER",
             anim = !(colorOs() && s.footerBottom != null && s.items.isEmpty() && f.toList && !s.toStack),
             why = "spread let go")
