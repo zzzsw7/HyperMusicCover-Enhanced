@@ -173,8 +173,10 @@ internal object NumState {
      * wake's own folds and opens cannot undo what the user just chose (2026-11-16).
      */
     private fun scheduleRemember(open: Boolean) {
-        if (SystemClock.uptimeMillis() < suppressUntil) return
         if (!Main.keyguardUp() || !Main.screenOn()) return
+        // A fold always counts: the burst after it is what gets held back, not the fold itself.
+        // An open is held back, so the settle the wake makes cannot undo a fold just made.
+        if (open && SystemClock.uptimeMillis() < suppressUntil) return
         suppressUntil = SystemClock.uptimeMillis() + 2000L
         writeMemory(open)
     }
