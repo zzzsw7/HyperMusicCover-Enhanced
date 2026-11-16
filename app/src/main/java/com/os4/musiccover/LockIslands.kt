@@ -621,6 +621,9 @@ internal object LockIslands {
         runCatching {
             ctx.registerReceiver(object : android.content.BroadcastReceiver() {
                 override fun onReceive(c: android.content.Context, i: android.content.Intent) {
+                    // The user may have folded or opened just before locking: take it now, before
+                    // the screen-off folds the stack itself (2026-11-16).
+                    NumState.flushPending()
 
                     // The keyguard locks a moment after the screen goes: once then, once to be sure.
                     for (delay in SCREEN_OFF_READS) main.postDelayed({ invalidate("screen off") }, delay)

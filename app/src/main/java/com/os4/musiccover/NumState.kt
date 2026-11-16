@@ -173,6 +173,18 @@ internal object NumState {
         writeMemory(open)
     }
 
+    /**
+     * The screen going off before the settle has run: expand or fold and lock at once, and the
+     * wait lost it. Flush what is pending, before the screen-off folds the stack itself
+     * (2026-11-16).
+     */
+    fun flushPending() {
+        val open = pendingOpen ?: return
+        rememberGen++
+        main.removeCallbacks(rememberRun)
+        writeMemory(open)
+    }
+
     /** Writes the memory (and puts the wake's default where the user left the stack). */
     private fun writeMemory(open: Boolean) {
         val ctx = Main.sAppCtx ?: return
