@@ -74,6 +74,7 @@ internal object NumState {
                         Xp.log("MCNum: " + (if (value) "folded" else "opened")
                             + " (driving=" + driving.ifEmpty { "external" } + ")")
                         if (!value) lastOpenedAt = SystemClock.uptimeMillis()
+                        scheduleRemember(!value)
                         listeners.forEach { runCatching { it(value) } }
                     }
                     result
@@ -151,15 +152,24 @@ internal object NumState {
     }
 
     /**
-     * Taken as the screen goes (LockIslands' screen-off receiver): what the user leaves the lock
-     * screen in is the memory, not the flurry of opens and folds the wake itself makes - reading
-     * every transition made the memory follow the unlock instead of the user (2026-11-16).
+     * What the user leaves the lock screen in is the memory - but only once it has settled: the
+     * wake and the unlock move the stack several times in a second, and taking every transition
+     * made the memory follow those instead of the user (2026-11-16). Written a moment after the
+     * last change, and only while the lock screen is up with the screen on.
      */
-    fun snapshot() {
-        // Whatever the stack is in as the screen goes is what the user leaves behind. The
-        // keyguard's own answer is not asked: at the screen-off it may not be locked yet, and
-        // the value it has is the state the lock screen was last in anyway.
-        val open = inNumber?.let { !it } ?: return
+    private var rememberGen = 0
+    private var pendingOpen: Boolean? = null
+
+    private fun scheduleRemember(open: Boolean) {
+        pendingOpen = open
+        val gen = ++rememberGen
+        main.removeCallbacks(rememberRun)
+        main.postDelayed({ if (gen == rememberGen) rememberRun.run() }, 1200L)
+    }
+
+    private val rememberRun = Runnable {
+        val open = pendingOpen ?: return@Runnable
+        if (!Main.keyguardUp() || !Main.screenOn()) return@Runnable
         writeMemory(open)
     }
 
