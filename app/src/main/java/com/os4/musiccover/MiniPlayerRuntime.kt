@@ -11621,7 +11621,11 @@ private class MiniPlayerController(
         if (updateFrom != null) startUpdate(updateContent, updateFrom)
         prewarmSpares()
         val keyguardNow = Main.keyguardUp()
-        if (keyguardNow && !wasKeyguard) armedRestore = true
+        if (keyguardNow && !wasKeyguard) {
+            armedRestore = true
+            restoreSince = 0L
+            restoreUnfolded = false
+        }
         wasKeyguard = keyguardNow
         maybeRestoreExpanded()
     } finally { android.os.Trace.endSection() } }
@@ -11642,6 +11646,10 @@ private class MiniPlayerController(
      */
     private var armedRestore = false
     private var wasKeyguard = false
+
+    /** When this restore started waiting for its card's row, and whether it has opened the stack. */
+    private var restoreSince = 0L
+    private var restoreUnfolded = false
 
     private var restoreLogAt = 0L
 
@@ -11681,19 +11689,28 @@ private class MiniPlayerController(
         if (want == MUSIC_ISLAND) {
             // Asked in the lock screen's first frames, while the stack still has the media row
             // folded, the open was refused 800 ms later (rowWait) and the card fell back into
-            // the island: it flashed out and came home (2026-11-16). Wait for the row to be up.
+            // the island: it flashed out and came home (2026-11-16). Wait for the row to be up,
+            // and open the folded stack for it: the lock screen wakes folded to its "N
+            // notifications" count, where the row the card lands on is hidden.
             if (!restoreRowReady(want)) {
-                if (++restoreTries <= RESTORE_ROW_TRIES) {
-                    restoreLog("restore: music card's row not up yet (try " + restoreTries + ")")
+                if (restoreSince == 0L) restoreSince = android.os.SystemClock.uptimeMillis()
+                if (!restoreUnfolded && stackFolded() == true) {
+                    restoreUnfolded = true
+                    restoreLog("restore: opening the folded stack for the music card")
+                    NumState.goTo("LIST", why = "restore: the card needs its row")
+                }
+                if (android.os.SystemClock.uptimeMillis() - restoreSince < RESTORE_WAIT_MS) {
+                    restoreLog("restore: music card's row not up yet")
                     handler.postDelayed({ scheduleRefresh() }, RESTORE_ROW_RETRY_MS)
                 } else {
-                    restoreTries = 0
+                    restoreSince = 0L
                     armedRestore = false
                     restoreLog("restore: music card's row never came up")
                 }
                 return
             }
             restoreTries = 0
+            restoreSince = 0L
             armedRestore = false
             Xp.log("MCMini: restoring the music card")
             expandNote(MUSIC_ISLAND)
@@ -13391,12 +13408,13 @@ private const val SPREAD_GIVE_UP_MS = 3000L
 private const val FOLD_FINISH_MS = 150L
 
 /**
- * A restore waits this many times, this far apart, for its card's row to come up: asked before
- * the lock screen's stack has the row on screen, the open is refused and the card falls back
- * into the island, flashing out and home (2026-11-16).
+ * A restore waits for its card's row to come up: asked before the lock screen's stack has the
+ * row on screen, the open is refused and the card falls back into the island, flashing out and
+ * home (2026-11-16). Folded to its count, the stack is opened for it, once.
  */
 private const val RESTORE_ROW_TRIES = 20
 private const val RESTORE_ROW_RETRY_MS = 300L
+private const val RESTORE_WAIT_MS = 8000L
 
 /** A finger pulling the open list this far toward the fold takes the cards home with it. */
 private const val SPREAD_PULL_DP = 8f
