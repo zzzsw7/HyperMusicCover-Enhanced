@@ -434,7 +434,14 @@ internal object LockIslands {
             // On for good once the islands have shown (off only with the feature: stopFolding).
             if (value) {
                 NumState.setFolding(true)
-                NumState.foldIfPiled("row showing")
+                // Remembered open: put the stack there at once, with no animation of ours - the
+                // lock screen has already come up folded to its count, and folding it back only
+                // to open it again read as a flash (2026-11-16).
+                if (NumState.rememberedOpen()) {
+                    NumState.goTo("LIST", anim = false, why = "remembered open (row showing)")
+                } else {
+                    NumState.foldIfPiled("row showing")
+                }
             }
             followStack("row ${if (value) "showing" else "gone"}")
         }
