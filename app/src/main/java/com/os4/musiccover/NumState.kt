@@ -167,13 +167,16 @@ internal object NumState {
     private var rememberGen = 0
     private var pendingOpen: Boolean? = null
 
+    /**
+     * A change in the stack is taken at once - a fold then a quick lock must not wait for the
+     * animation to finish - and the burst that follows it is not written over it, so the
+     * wake's own folds and opens cannot undo what the user just chose (2026-11-16).
+     */
     private fun scheduleRemember(open: Boolean) {
-        // A gesture has just written the user's choice: its animation must not write over it.
         if (SystemClock.uptimeMillis() < suppressUntil) return
-        pendingOpen = open
-        val gen = ++rememberGen
-        main.removeCallbacks(rememberRun)
-        main.postDelayed({ if (gen == rememberGen) rememberRun.run() }, 1200L)
+        if (!Main.keyguardUp() || !Main.screenOn()) return
+        suppressUntil = SystemClock.uptimeMillis() + 2000L
+        writeMemory(open)
     }
 
     private val rememberRun = Runnable {
@@ -242,7 +245,7 @@ internal object NumState {
     /** The module's own list gesture has ended: folded home, or left open as the list. */
     fun noteSpreadEnd(folded: Boolean) {
         if (!folding) return
-        suppressUntil = SystemClock.uptimeMillis() + 2500L
+        suppressUntil = SystemClock.uptimeMillis() + 4000L
         Xp.log("MCNum: spread end -> " + (if (folded) "folded" else "opened"))
         writeMemory(!folded, force = true)
     }
