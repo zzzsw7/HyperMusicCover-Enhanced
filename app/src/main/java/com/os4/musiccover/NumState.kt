@@ -159,6 +159,10 @@ internal object NumState {
         if (p.getBoolean(PREF_OPEN, false) != open) {
             p.edit().putBoolean(PREF_OPEN, open).apply()
             trace(if (open) "remembered: opened" else "remembered: folded")
+            // The wake reads the stack's default from the model's flow, and folding was turned on
+            // only once: leaving the flow as it was meant the next wake opened the list anyway
+            // (2026-11-16). Put it at what the user just chose.
+            runCatching { forceDefault(true) }
         }
     }
 
