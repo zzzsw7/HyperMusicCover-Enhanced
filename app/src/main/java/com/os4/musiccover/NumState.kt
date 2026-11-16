@@ -89,8 +89,9 @@ internal object NumState {
             Xp.hookAll(vmClass, "switchStackStatus") { chain ->
                 val target = chain.proceed()
                 val info = chain.args.firstOrNull()
-                val out = runCatching { handsUp(chain.thisObject, info, target as Float) }
-                    .getOrNull() ?: target
+                val landing = target as Float
+                val out: Float = runCatching { handsUp(chain.thisObject, info, landing) }
+                    .getOrNull() ?: landing
                 // The gesture has just ended: this is the state the user is leaving the lock
                 // screen in, written before any of the animation's own transitions (2026-11-16).
                 runCatching { noteGesture(info, out, chain.thisObject) }
