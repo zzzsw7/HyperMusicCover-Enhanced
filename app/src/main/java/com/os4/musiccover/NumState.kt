@@ -159,21 +159,8 @@ internal object NumState {
      */
     private var rememberGen = 0
     private var pendingOpen: Boolean? = null
-    @Volatile private var lastFoldedAt = 0L
 
     private fun scheduleRemember(open: Boolean) {
-        if (!open) {
-            // A fold is the user's own: written at once, so the settle that reports the stack
-            // opened again a moment later cannot undo it (2026-11-16).
-            lastFoldedAt = SystemClock.uptimeMillis()
-            pendingOpen = null
-            rememberGen++
-            main.removeCallbacks(rememberRun)
-            writeMemory(false)
-            return
-        }
-        // The settle after a fold reports one more open; that is not a new choice.
-        if (lastFoldedAt != 0L && SystemClock.uptimeMillis() - lastFoldedAt < 3000L) return
         pendingOpen = open
         val gen = ++rememberGen
         main.removeCallbacks(rememberRun)
