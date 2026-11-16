@@ -158,10 +158,16 @@ internal object NumState {
         val ctx = Main.sAppCtx ?: return
         val now = SystemClock.uptimeMillis()
         if (open) {
+            // Right after a fold the stack reports itself opened once more - the keyguard's own
+            // settling, or the unlock pulling the shade away. That is not the user opening it
+            // again, and taking it would undo the fold they just made (2026-11-16).
+            if (recentlyFolded()) return
             lastOpenedAt = now
         } else if (recentlyOpened()) {
             // The module's own settling after an open, not a fold the user asked for.
             return
+        } else {
+            lastFoldedAt = now
         }
         val p = ctx.getSharedPreferences("hmc_mini", android.content.Context.MODE_PRIVATE)
         if (p.getBoolean(PREF_OPEN, false) != open) {
@@ -181,6 +187,12 @@ internal object NumState {
         lastOpenedAt != 0L && SystemClock.uptimeMillis() - lastOpenedAt < 4000L
 
     @Volatile private var lastOpenedAt = 0L
+
+    /** When the stack was last folded by hand: an open right after it is not a new choice. */
+    @Volatile private var lastFoldedAt = 0L
+
+    private fun recentlyFolded(): Boolean =
+        lastFoldedAt != 0L && SystemClock.uptimeMillis() - lastFoldedAt < 3000L
 
     private fun handsUp(model: Any, info: Any?, target: Float): Float? {
         if (!folding || info == null || !LockIslands.foldsToCount()) return null
