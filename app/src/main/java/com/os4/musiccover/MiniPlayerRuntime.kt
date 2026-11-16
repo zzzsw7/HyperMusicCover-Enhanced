@@ -11716,11 +11716,6 @@ private class MiniPlayerController(
                 restoreReleased = true
                 LockIslands.release(want)
             }
-            if (!restoreUnfolded && stackFolded() == true) {
-                restoreUnfolded = true
-                restoreLog("restore: opening the folded stack for " + want.takeLast(12))
-                NumState.goTo("LIST", why = "restore: the card needs its row")
-            }
             if (android.os.SystemClock.uptimeMillis() - restoreSince < RESTORE_WAIT_MS) {
                 restoreLog("restore: row not up yet " + want.takeLast(12))
                 handler.postDelayed({ scheduleRefresh() }, RESTORE_ROW_RETRY_MS)

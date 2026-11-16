@@ -71,6 +71,7 @@ internal object NumState {
                     if (inNumber != value) {
                         inNumber = value
                         trace(if (value) "stack folded" else "stack opened")
+                        remember(open = !value)
                         listeners.forEach { runCatching { it(value) } }
                     }
                     result
@@ -121,6 +122,37 @@ internal object NumState {
         trace("folding=$on")
         forceDefault(on)
         if (!on) hideCount(false)
+    }
+
+    // ── the state the user left the stack in（2026-11-16，用户要求）────────────
+    // The lock screen comes up folded to its "N notifications" count whatever was left open:
+    // the module forces NUMBER as the wake's default. What the user chooses by hand is kept, so
+    // the next wake comes up the same way - an opened list or card stays opened instead of being
+    // folded back into the island.
+    private const val PREF_OPEN = "num_state_open"
+
+    /** Until when the module's own moves are not the user's choice (its automatic folding). */
+    @Volatile private var suppressUntil = 0L
+
+    fun suppressRemembering() {
+        suppressUntil = SystemClock.uptimeMillis() + 1500L
+    }
+
+    /** The stack is to come up opened: the user last left it that way. */
+    fun rememberedOpen(): Boolean {
+        val ctx = Main.sAppCtx ?: return false
+        return ctx.getSharedPreferences("hmc_mini", android.content.Context.MODE_PRIVATE)
+            .getBoolean(PREF_OPEN, false)
+    }
+
+    private fun remember(open: Boolean) {
+        if (SystemClock.uptimeMillis() < suppressUntil) return
+        val ctx = Main.sAppCtx ?: return
+        val p = ctx.getSharedPreferences("hmc_mini", android.content.Context.MODE_PRIVATE)
+        if (p.getBoolean(PREF_OPEN, false) != open) {
+            p.edit().putBoolean(PREF_OPEN, open).apply()
+            trace(if (open) "remembered: opened" else "remembered: folded")
+        }
     }
 
     private fun handsUp(model: Any, info: Any?, target: Float): Float? {
@@ -389,9 +421,11 @@ internal object NumState {
             val flow = defaultFlow() ?: return
             val model = model() ?: return
             if (on) {
-                Xp.callMethod(flow, "setValue", stateConst(model, "NUMBER"))
+                // The wake's default is the state the user left the stack in (2026-11-16).
+                val remembered = if (rememberedOpen()) "LIST" else "NUMBER"
+                Xp.callMethod(flow, "setValue", stateConst(model, remembered))
                 forcedDefault = true
-                trace("default NUMBER (in memory)")
+                trace("default $remembered (in memory)")
             } else if (forcedDefault) {
                 forcedDefault = false
                 val setting = android.provider.Settings.System.getInt(
@@ -424,7 +458,12 @@ internal object NumState {
         if (LockIslands.keepsPileOnFold()) return@Runnable
         if (LockIslands.spreadingNow()) { trace("pile check skipped: spread ($foldWhy)"); return@Runnable }
         if (busy()) { foldIfPiled(foldWhy); return@Runnable }
-        if (state() == "STACK") goTo("NUMBER", anim = true, why = "piled ($foldWhy)")
+        if (state() == "STACK") {
+            // Its own folding is not the user's choice: the stack comes up as they left it.
+            suppressRemembering()
+            if (rememberedOpen()) goTo("LIST", anim = true, why = "remembered open ($foldWhy)")
+            else goTo("NUMBER", anim = true, why = "piled ($foldWhy)")
+        }
     }
 
     // ---------------------------------------------------------------- the count line
