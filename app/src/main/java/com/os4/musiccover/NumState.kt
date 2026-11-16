@@ -74,7 +74,7 @@ internal object NumState {
                         Xp.log("MCNum: " + (if (value) "folded" else "opened")
                             + " (driving=" + driving.ifEmpty { "external" } + ")")
                         if (!value) lastOpenedAt = SystemClock.uptimeMillis()
-                        scheduleRemember(!value)
+
                         listeners.forEach { runCatching { it(value) } }
                     }
                     result
@@ -219,6 +219,18 @@ internal object NumState {
 
 
     /** The module's own list gesture has ended: folded home, or left open as the list. */
+    /**
+     * The module's own capsule state, as LockIslands follows it: the notification group folded
+     * into the bottom island (false) or out as the list (true). That is the state the user sees -
+     * the system's own pile in between is not - and it is the one to keep (2026-11-16).
+     */
+    fun rememberModuleState(open: Boolean) {
+        if (!Main.keyguardUp() || !Main.screenOn()) return
+        suppressUntil = SystemClock.uptimeMillis() + 1500L
+        Xp.log("MCNum: module state -> " + (if (open) "opened" else "folded"))
+        writeMemory(open, force = true)
+    }
+
     fun noteSpreadEnd(folded: Boolean) {
         if (!folding) return
         suppressUntil = SystemClock.uptimeMillis() + 2500L

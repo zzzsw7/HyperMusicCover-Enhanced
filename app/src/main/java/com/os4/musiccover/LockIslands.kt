@@ -391,6 +391,9 @@ internal object LockIslands {
         if (out != stackOut) {
             stackOut = out
             NumState.trace("$why: island ${if (out) "out" else "in"}")
+            // The user's capsule is folded into the island or out as the list: the state to keep
+            // across a lock screen (2026-11-16).
+            NumState.rememberModuleState(out)
         }
         publish()
     }
