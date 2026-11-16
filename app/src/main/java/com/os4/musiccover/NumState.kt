@@ -196,6 +196,7 @@ internal object NumState {
     fun rememberScreenOff() {
         val open = LockIslands.stackIsOut()
         Xp.log("MCNum: screen off -> " + (if (open) "opened" else "folded"))
+        suppressUntil = SystemClock.uptimeMillis() + 5000L
         writeMemory(open, force = true)
     }
 
@@ -238,6 +239,9 @@ internal object NumState {
      */
     fun rememberModuleState(open: Boolean) {
         if (!Main.keyguardUp() || !Main.screenOn()) return
+        // The screen going off reports one more "out as the list" a moment later (the stack's own
+        // going-away), which would undo the fold just kept: that window is held shut (2026-11-16).
+        if (SystemClock.uptimeMillis() < suppressUntil) return
         suppressUntil = SystemClock.uptimeMillis() + 1500L
         Xp.log("MCNum: module state -> " + (if (open) "opened" else "folded"))
         writeMemory(open, force = true)
