@@ -73,7 +73,7 @@ internal object NumState {
                         trace(if (value) "stack folded" else "stack opened")
                         Xp.log("MCNum: " + (if (value) "folded" else "opened")
                             + " (driving=" + driving.ifEmpty { "external" } + ")")
-                        remember(open = !value)
+                        if (!value) lastOpenedAt = SystemClock.uptimeMillis()
                         listeners.forEach { runCatching { it(value) } }
                     }
                     result
@@ -150,24 +150,22 @@ internal object NumState {
             .getBoolean(PREF_OPEN, false)
     }
 
-    private fun remember(open: Boolean) {
-        if (SystemClock.uptimeMillis() < suppressUntil) return
-        // Unlocking moves the stack too - it opens and closes as the shade goes - and that is
-        // not the state the user leaves the lock screen in (2026-11-16).
-        if (!Main.keyguardUp()) return
+    /**
+     * Taken as the screen goes (LockIslands' screen-off receiver): what the user leaves the lock
+     * screen in is the memory, not the flurry of opens and folds the wake itself makes - reading
+     * every transition made the memory follow the unlock instead of the user (2026-11-16).
+     */
+    fun snapshot() {
+        // Whatever the stack is in as the screen goes is what the user leaves behind. The
+        // keyguard's own answer is not asked: at the screen-off it may not be locked yet, and
+        // the value it has is the state the lock screen was last in anyway.
+        val open = inNumber?.let { !it } ?: return
+        writeMemory(open)
+    }
+
+    /** Writes the memory (and puts the wake's default where the user left the stack). */
+    private fun writeMemory(open: Boolean) {
         val ctx = Main.sAppCtx ?: return
-        val now = SystemClock.uptimeMillis()
-        if (open) {
-            // Right after a fold the stack reports itself opened once more - the keyguard's own
-            // settling, or the unlock pulling the shade away. That is not the user opening it
-            // again, and taking it would undo the fold they just made (2026-11-16).
-            if (recentlyFolded()) return
-            lastOpenedAt = now
-        } else {
-            // A fold is the user's (the module's own settle-fold is stopped in handsUp): the
-            // wait after an open made a quick fold-and-lock lose the fold (2026-11-16).
-            lastFoldedAt = now
-        }
         val p = ctx.getSharedPreferences("hmc_mini", android.content.Context.MODE_PRIVATE)
         if (p.getBoolean(PREF_OPEN, false) != open) {
             p.edit().putBoolean(PREF_OPEN, open).apply()
@@ -187,11 +185,6 @@ internal object NumState {
 
     @Volatile private var lastOpenedAt = 0L
 
-    /** When the stack was last folded by hand: an open right after it is not a new choice. */
-    @Volatile private var lastFoldedAt = 0L
-
-    private fun recentlyFolded(): Boolean =
-        lastFoldedAt != 0L && SystemClock.uptimeMillis() - lastFoldedAt < 3000L
 
     private fun handsUp(model: Any, info: Any?, target: Float): Float? {
         if (!folding || info == null || !LockIslands.foldsToCount()) return null

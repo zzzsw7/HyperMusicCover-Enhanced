@@ -621,6 +621,10 @@ internal object LockIslands {
         runCatching {
             ctx.registerReceiver(object : android.content.BroadcastReceiver() {
                 override fun onReceive(c: android.content.Context, i: android.content.Intent) {
+                    // The state the user leaves the lock screen in, taken as the screen goes: the
+                    // transitions after it (the shade pulling away, the keyguard settling) are
+                    // not theirs, and reading them flipped the memory on every wake (2026-11-16).
+                    NumState.snapshot()
                     // The keyguard locks a moment after the screen goes: once then, once to be sure.
                     for (delay in SCREEN_OFF_READS) main.postDelayed({ invalidate("screen off") }, delay)
                 }
