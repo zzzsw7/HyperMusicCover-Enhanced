@@ -187,6 +187,18 @@ internal object NumState {
      * wait lost it. Flush what is pending, before the screen-off folds the stack itself
      * (2026-11-16).
      */
+    /**
+     * The screen going off: the capsule as it stands - the module's own island, folded or out as
+     * the list - is what the user leaves behind, and the one thing to keep. Taken here so a fold
+     * made a moment before locking is still kept, however the system's stack settles after it
+     * (2026-11-16).
+     */
+    fun rememberScreenOff() {
+        val open = LockIslands.stackIsOut()
+        Xp.log("MCNum: screen off -> " + (if (open) "opened" else "folded"))
+        writeMemory(open, force = true)
+    }
+
     fun flushPending() {
         val open = pendingOpen ?: return
         rememberGen++

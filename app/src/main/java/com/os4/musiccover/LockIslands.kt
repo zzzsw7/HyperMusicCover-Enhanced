@@ -273,6 +273,9 @@ internal object LockIslands {
     /** The stack island tapped open: all of its notifications back in the stack, new ones too. */
     private var stackOut = false
 
+    /** Whether the notification group is out as the list (true) or folded into the island. */
+    fun stackIsOut(): Boolean = stackOut
+
     /**
      * For NumStateProbe: ordinary notifications left in the stack instead of the stack island,
      * so the stack's own "N notifications" state can be looked at with them in it. Not saved.
@@ -626,7 +629,7 @@ internal object LockIslands {
                 override fun onReceive(c: android.content.Context, i: android.content.Intent) {
                     // The user may have folded or opened just before locking: take it now, before
                     // the screen-off folds the stack itself (2026-11-16).
-                    NumState.flushPending()
+                    NumState.rememberScreenOff()
 
                     // The keyguard locks a moment after the screen goes: once then, once to be sure.
                     for (delay in SCREEN_OFF_READS) main.postDelayed({ invalidate("screen off") }, delay)
