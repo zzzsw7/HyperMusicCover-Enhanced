@@ -11679,8 +11679,18 @@ private class MiniPlayerController(
         // The music's "island" is not a released row - it is the constant key the module uses for
         // its own card - so it never passes the check below. Ask for it directly.
         if (want == MUSIC_ISLAND) {
-            if (++restoreTries <= 20 && player == null) {
-                handler.postDelayed({ scheduleRefresh() }, 300)
+            // Asked in the lock screen's first frames, while the stack still has the media row
+            // folded, the open was refused 800 ms later (rowWait) and the card fell back into
+            // the island: it flashed out and came home (2026-11-16). Wait for the row to be up.
+            if (!restoreRowReady(want)) {
+                if (++restoreTries <= RESTORE_ROW_TRIES) {
+                    restoreLog("restore: music card's row not up yet (try " + restoreTries + ")")
+                    handler.postDelayed({ scheduleRefresh() }, RESTORE_ROW_RETRY_MS)
+                } else {
+                    restoreTries = 0
+                    armedRestore = false
+                    restoreLog("restore: music card's row never came up")
+                }
                 return
             }
             restoreTries = 0
@@ -11689,16 +11699,19 @@ private class MiniPlayerController(
             expandNote(MUSIC_ISLAND)
             return
         }
-        if (rowFor(want) == null) {
+        if (rowFor(want) == null || !restoreRowReady(want)) {
             // A notification row is NOT out of the stack by itself: the OEM panel had released
             // it, and that release is what the mini player draws as a row. Ask for it again.
-            if (want != MUSIC_ISLAND && !restoreReleased) {
+            if (rowFor(want) == null && !restoreReleased) {
                 restoreReleased = true
                 LockIslands.release(want)
             }
-            if (++restoreTries <= 20) handler.postDelayed({ scheduleRefresh() }, 300)
-            else restoreTries = 0
-            restoreLog("restore: row " + want.takeLast(12) + " missing (try " + restoreTries
+            if (++restoreTries <= RESTORE_ROW_TRIES) {
+                handler.postDelayed({ scheduleRefresh() }, RESTORE_ROW_RETRY_MS)
+            } else {
+                restoreTries = 0
+            }
+            restoreLog("restore: row " + want.takeLast(12) + " not ready (try " + restoreTries
                     + ") have=" + LockIslands.releasedKeys().joinToString(",") { it.takeLast(10) })
             return
         }
@@ -11707,6 +11720,19 @@ private class MiniPlayerController(
         armedRestore = false
         Xp.log("MCMini: restoring the expanded card " + want.takeLast(12))
         expandNote(want)
+    }
+
+    /**
+     * The row the card would come out of is laid out and on screen. Opening a card whose row the
+     * stack still hides is refused after [ROW_WAIT_MS] and the card drops back into the island -
+     * the flash it made on the first frames of a lock screen (2026-11-16).
+     */
+    private fun restoreRowReady(key: String): Boolean {
+        val view = player ?: return false
+        if (view.visibility != View.VISIBLE) return false
+        val row = nativeFor(key) ?: return false
+        return row.isAttachedToWindow && row.isLaidOut && row.width > 0 && row.height > 0 &&
+            rowOnScreen(row)
     }
 
     /** The session and track the music island is showing; a new one starts its artwork afresh. */
@@ -13363,6 +13389,14 @@ private const val SPREAD_GIVE_UP_MS = 3000L
 
 /** A fold landed this long without the stack counting itself folded asks it to finish. */
 private const val FOLD_FINISH_MS = 150L
+
+/**
+ * A restore waits this many times, this far apart, for its card's row to come up: asked before
+ * the lock screen's stack has the row on screen, the open is refused and the card falls back
+ * into the island, flashing out and home (2026-11-16).
+ */
+private const val RESTORE_ROW_TRIES = 20
+private const val RESTORE_ROW_RETRY_MS = 300L
 
 /** A finger pulling the open list this far toward the fold takes the cards home with it. */
 private const val SPREAD_PULL_DP = 8f
