@@ -9263,7 +9263,7 @@ private class MiniPlayerController(
      * straight into the row, the pill beside it never changing. The first version switched the
      * small island into the pill and opened it from there - two motions where one was asked for.
      */
-    fun expandNote(key: String, remember: Boolean = true) { android.os.Trace.beginSection("MC expandNote"); try {
+    fun expandNote(key: String) { android.os.Trace.beginSection("MC expandNote"); try {
         // Folded natively (LockIslands.nativeStack), the stack island opens as the stack's own
         // list, ColorOS's way: the island leaves the row and the rows come out of the fold where
         // they are. No flight: the rows were never out of the stack for one to land on.
@@ -9306,15 +9306,7 @@ private class MiniPlayerController(
         // Opened, the stack island leads with its newest notification, the one it shows.
         if (key == STACK_ISLAND) stackLeadKey = null
         noteMorphKey = key
-        // Only the user's own opens are the memory: a restore (or any other automatic open)
-        // remembering its own card overwrote the notification the user had left out, and the
-        // next lock brought the island back instead (2026-11-16).
-        if (remember) {
-            userOpenedKey = key
-            MiniPlayerRuntime.rememberExpanded(key)
-        } else {
-            userOpenedKey = null
-        }
+        MiniPlayerRuntime.rememberExpanded(key)
         flightFromSmall = fromSmall
         flightHome = if (fromSmall) HOME_SMALL else HOME_PILL
         flightOut = false
@@ -11629,11 +11621,7 @@ private class MiniPlayerController(
         if (updateFrom != null) startUpdate(updateContent, updateFrom)
         prewarmSpares()
         val keyguardNow = Main.keyguardUp()
-        if (keyguardNow && !wasKeyguard) {
-            armedRestore = true
-            restoreSince = 0L
-            restoreUnfolded = false
-        }
+        if (keyguardNow && !wasKeyguard) armedRestore = true
         wasKeyguard = keyguardNow
         maybeRestoreExpanded()
     } finally { android.os.Trace.endSection() } }
@@ -11655,16 +11643,6 @@ private class MiniPlayerController(
     private var armedRestore = false
     private var wasKeyguard = false
 
-    /**
-     * The card the user opened by hand (not a restore): with it out, the restore stands down
-     * instead of putting the user's notification away for the remembered one (2026-11-16).
-     */
-    private var userOpenedKey: String? = null
-
-    /** When this restore started waiting for its card's row, and whether it has opened the stack. */
-    private var restoreSince = 0L
-    private var restoreUnfolded = false
-
     private var restoreLogAt = 0L
 
     private fun restoreLog(message: String) {
@@ -11681,70 +11659,54 @@ private class MiniPlayerController(
         if (want.isNullOrEmpty()) { armedRestore = false; return }
         val outKey = expandedKey()
         if (outKey != null) {
+            // Only one card can be out at a time, so a different one sitting there must go home
+            // before the remembered one can come out (2026-11-15). Without this the restore waited
+            // for ever behind a music card that had itself just been restored.
             if (outKey == want) {
                 // Already the card the user left out: there is nothing to do, and staying armed
                 // would put it back the moment they collapse it.
                 armedRestore = false
                 return
             }
-            if (outKey == userOpenedKey) {
-                // Opened by hand since the lock: it is the user's card, not one the restore may
-                // put away to make room (2026-11-16).
-                armedRestore = false
-                restoreLog("restore: " + outKey.takeLast(12) + " is the user's, left alone")
-                return
+            if (outKey != want) {
+                restoreTries = 0
+                restoreLog("restore: putting " + outKey.takeLast(12) + " away for " + want.takeLast(12))
+                preferMini()
+                handler.postDelayed({ scheduleRefresh() }, 300)
             }
-            // Only one card can be out at a time, so a different one sitting there must go home
-            // before the remembered one can come out (2026-11-15). Without this the restore waited
-            // for ever behind a music card that had itself just been restored.
-            restoreTries = 0
-            restoreLog("restore: putting " + outKey.takeLast(12) + " away for " + want.takeLast(12))
-            preferMini()
-            handler.postDelayed({ scheduleRefresh() }, 300)
             return
         }
-        // Nothing is out: make the remembered card's row available, then open it. The lock
-        // screen's stack comes up folded to its "N notifications" count, where the row the card
-        // lands on is hidden - asked then, the open was refused 800 ms later (rowWait) and the
-        // card fell back into the island: it flashed out and came home (2026-11-16). The folded
-        // stack is opened for it, once, as a pull on the island would.
-        if (!restoreRowReady(want)) {
-            if (restoreSince == 0L) restoreSince = android.os.SystemClock.uptimeMillis()
-            if (want != MUSIC_ISLAND && rowFor(want) == null && !restoreReleased) {
-                // A notification row is NOT out of the stack by itself: the OEM panel had released
-                // it, and that release is what the mini player draws as a row. Ask for it again.
+        // The music's "island" is not a released row - it is the constant key the module uses for
+        // its own card - so it never passes the check below. Ask for it directly.
+        if (want == MUSIC_ISLAND) {
+            if (++restoreTries <= 20 && player == null) {
+                handler.postDelayed({ scheduleRefresh() }, 300)
+                return
+            }
+            restoreTries = 0
+            armedRestore = false
+            Xp.log("MCMini: restoring the music card")
+            expandNote(MUSIC_ISLAND)
+            return
+        }
+        if (rowFor(want) == null) {
+            // A notification row is NOT out of the stack by itself: the OEM panel had released
+            // it, and that release is what the mini player draws as a row. Ask for it again.
+            if (want != MUSIC_ISLAND && !restoreReleased) {
                 restoreReleased = true
                 LockIslands.release(want)
             }
-            if (android.os.SystemClock.uptimeMillis() - restoreSince < RESTORE_WAIT_MS) {
-                restoreLog("restore: row not up yet " + want.takeLast(12))
-                handler.postDelayed({ scheduleRefresh() }, RESTORE_ROW_RETRY_MS)
-            } else {
-                restoreSince = 0L
-                armedRestore = false
-                restoreLog("restore: row never came up " + want.takeLast(12))
-            }
+            if (++restoreTries <= 20) handler.postDelayed({ scheduleRefresh() }, 300)
+            else restoreTries = 0
+            restoreLog("restore: row " + want.takeLast(12) + " missing (try " + restoreTries
+                    + ") have=" + LockIslands.releasedKeys().joinToString(",") { it.takeLast(10) })
             return
         }
         restoreTries = 0
         restoreReleased = false
-        restoreSince = 0L
         armedRestore = false
         Xp.log("MCMini: restoring the expanded card " + want.takeLast(12))
-        expandNote(want, remember = false)
-    }
-
-    /**
-     * The row the card would come out of is laid out and on screen. Opening a card whose row the
-     * stack still hides is refused after [ROW_WAIT_MS] and the card drops back into the island -
-     * the flash it made on the first frames of a lock screen (2026-11-16).
-     */
-    private fun restoreRowReady(key: String): Boolean {
-        val view = player ?: return false
-        if (view.visibility != View.VISIBLE) return false
-        val row = nativeFor(key) ?: return false
-        return row.isAttachedToWindow && row.isLaidOut && row.width > 0 && row.height > 0 &&
-            rowOnScreen(row)
+        expandNote(want)
     }
 
     /** The session and track the music island is showing; a new one starts its artwork afresh. */
@@ -13401,14 +13363,6 @@ private const val SPREAD_GIVE_UP_MS = 3000L
 
 /** A fold landed this long without the stack counting itself folded asks it to finish. */
 private const val FOLD_FINISH_MS = 150L
-
-/**
- * A restore waits for its card's row to come up: asked before the lock screen's stack has the
- * row on screen, the open is refused and the card falls back into the island, flashing out and
- * home (2026-11-16). Folded to its count, the stack is opened for it, once.
- */
-private const val RESTORE_ROW_RETRY_MS = 300L
-private const val RESTORE_WAIT_MS = 8000L
 
 /** A finger pulling the open list this far toward the fold takes the cards home with it. */
 private const val SPREAD_PULL_DP = 8f
