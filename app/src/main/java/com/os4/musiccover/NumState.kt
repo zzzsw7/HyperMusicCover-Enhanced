@@ -73,6 +73,9 @@ internal object NumState {
                         trace(if (value) "stack folded" else "stack opened")
                         Xp.log("MCNum: " + (if (value) "folded" else "opened")
                             + " (driving=" + driving.ifEmpty { "external" } + ")")
+                        if (!value && driving.isNotEmpty()) {
+                            moduleOpenedAt = SystemClock.uptimeMillis()
+                        }
                         remember(open = !value)
                         listeners.forEach { runCatching { it(value) } }
                     }
@@ -187,6 +190,12 @@ internal object NumState {
 
     @Volatile private var lastOpenedAt = 0L
 
+    /** When the module itself last opened the stack (a restore, not the user). */
+    @Volatile private var moduleOpenedAt = 0L
+
+    private fun recentlyModuleOpened(): Boolean =
+        moduleOpenedAt != 0L && SystemClock.uptimeMillis() - moduleOpenedAt < 2500L
+
     /** When the stack was last folded by hand: an open right after it is not a new choice. */
     @Volatile private var lastFoldedAt = 0L
 
@@ -223,9 +232,12 @@ internal object NumState {
         // The user left the stack open by hand: a hands-up that lands on the pile must not fold
         // it back into the island behind their back (2026-11-16). Only the settling right after
         // the open - a fold asked for later is the user's own.
-        if (recentlyOpened()) {
-            trace("hands up at the pile: left open (just opened by the user)")
-            Xp.log("MCNum: hands up left open (just opened by the user)")
+        // Only when the module itself just opened the stack (a restore): a pile the user opened
+        // by hand must fold when they pull it home - the broad guard left it stuck open
+        // (2026-11-16).
+        if (recentlyModuleOpened()) {
+            trace("hands up at the pile: left open (the module just opened it)")
+            Xp.log("MCNum: hands up left open (the module just opened it)")
             return null
         }
         val number = number()
