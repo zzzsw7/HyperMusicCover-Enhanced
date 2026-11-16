@@ -88,8 +88,13 @@ internal object NumState {
         runCatching {
             Xp.hookAll(vmClass, "switchStackStatus") { chain ->
                 val target = chain.proceed()
-                runCatching { handsUp(chain.thisObject, chain.args.firstOrNull(), target as Float) }
+                val info = chain.args.firstOrNull()
+                val out = runCatching { handsUp(chain.thisObject, info, target as Float) }
                     .getOrNull() ?: target
+                // The gesture has just ended: this is the state the user is leaving the lock
+                // screen in, written before any of the animation's own transitions (2026-11-16).
+                runCatching { noteGesture(info, out, chain.thisObject) }
+                out
             }
         }.onFailure { Xp.log("MCNum: hands-up unhookable: $it") }
         // Wake on actual native scrolling, including STACK <-> LIST without number-state callbacks.
@@ -207,6 +212,25 @@ internal object NumState {
 
     @Volatile private var lastOpenedAt = 0L
 
+
+    /**
+     * The user let go of the stack: whether it is landing folded (the capsule) or opened (the
+     * list) is their choice, taken now - the transitions the animation makes afterwards are not.
+     */
+    private fun noteGesture(info: Any?, target: Float, model: Any) {
+        if (!folding || info == null) return
+        if ((Xp.getObjectField(info, "stackShowEvent") as? Enum<*>)?.name != "HANDS_UP") return
+        if (Xp.getObjectField(info, "isNumberState") == true) return
+        val number = runCatching {
+            val factory = Xp.getObjectField(Xp.getObjectField(model, "\$\$delegate_0"), "strategyFactory")
+            val strategy = Xp.callMethod(Xp.getObjectField(factory, "numberStrategy"), "get")
+            (Xp.callMethod(strategy, "calculateTargetYPosition", info) as Number).toFloat()
+        }.getOrNull() ?: return
+        val folded = kotlin.math.abs(number - target) < 1f
+        suppressUntil = SystemClock.uptimeMillis() + 2500L
+        Xp.log("MCNum: gesture -> " + (if (folded) "folded" else "opened"))
+        writeMemory(!folded)
+    }
 
     private fun handsUp(model: Any, info: Any?, target: Float): Float? {
         if (!folding || info == null || !LockIslands.foldsToCount()) return null
