@@ -71,6 +71,8 @@ internal object NumState {
                     if (inNumber != value) {
                         inNumber = value
                         trace(if (value) "stack folded" else "stack opened")
+                        Xp.log("MCNum: " + (if (value) "folded" else "opened")
+                            + " (driving=" + driving.ifEmpty { "external" } + ")")
                         remember(open = !value)
                         listeners.forEach { runCatching { it(value) } }
                     }
@@ -134,6 +136,9 @@ internal object NumState {
     /** Until when the module's own moves are not the user's choice (its automatic folding). */
     @Volatile private var suppressUntil = 0L
 
+    /** Why the module itself is moving the stack right now: its own moves are not the user's. */
+    @Volatile private var driving = ""
+
     fun suppressRemembering() {
         suppressUntil = SystemClock.uptimeMillis() + 1500L
     }
@@ -159,6 +164,8 @@ internal object NumState {
         if (p.getBoolean(PREF_OPEN, false) != open) {
             p.edit().putBoolean(PREF_OPEN, open).apply()
             trace(if (open) "remembered: opened" else "remembered: folded")
+            Xp.log("MCNum: remembered " + (if (open) "opened" else "folded")
+                + " (suppress=" + (SystemClock.uptimeMillis() < suppressUntil) + ")")
             // The wake reads the stack's default from the model's flow, and folding was turned on
             // only once: leaving the flow as it was meant the next wake opened the list anyway
             // (2026-11-16). Put it at what the user just chose.
@@ -204,10 +211,12 @@ internal object NumState {
         // the open - a fold asked for later is the user's own.
         if (recentlyOpened()) {
             trace("hands up at the pile: left open (just opened by the user)")
+            Xp.log("MCNum: hands up left open (just opened by the user)")
             return null
         }
         val number = number()
         trace("hands up at the pile: folded instead ($target -> $number)")
+        Xp.log("MCNum: hands up folded instead (target=$target -> $number)")
         return number
     }
 
@@ -381,6 +390,8 @@ internal object NumState {
 
     /** The stack scrolled to [state]: animated on the screen-on scroll's spring, or set. */
     fun goTo(state: String, anim: Boolean = true, why: String): String = runCatching {
+        driving = why
+        main.postDelayed({ if (driving == why) driving = "" }, 900L)
         val model = model() ?: return "no model"
         val stack = MiniPlayerRuntime.stackForProbe() ?: return "no stack"
         val y = scrollFor(model, state)
@@ -450,6 +461,7 @@ internal object NumState {
                 Xp.callMethod(flow, "setValue", stateConst(model, remembered))
                 forcedDefault = true
                 trace("default $remembered (in memory)")
+                Xp.log("MCNum: default " + remembered + " (in memory)")
             } else if (forcedDefault) {
                 forcedDefault = false
                 val setting = android.provider.Settings.System.getInt(
@@ -482,6 +494,8 @@ internal object NumState {
         if (LockIslands.keepsPileOnFold()) return@Runnable
         if (LockIslands.spreadingNow()) { trace("pile check skipped: spread ($foldWhy)"); return@Runnable }
         if (busy()) { foldIfPiled(foldWhy); return@Runnable }
+        Xp.log("MCNum: fold check why=" + foldWhy + " state=" + state()
+            + " rememberedOpen=" + rememberedOpen() + " busy=" + busy())
         if (state() == "STACK") {
             // Folded home by the user is their choice and is remembered; the module's own folding
             // (the row showing, notifications changing) is not, and leaves the memory alone.
