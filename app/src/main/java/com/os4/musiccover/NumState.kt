@@ -152,6 +152,9 @@ internal object NumState {
 
     private fun remember(open: Boolean) {
         if (SystemClock.uptimeMillis() < suppressUntil) return
+        // Unlocking moves the stack too - it opens and closes as the shade goes - and that is
+        // not the state the user leaves the lock screen in (2026-11-16).
+        if (!Main.keyguardUp()) return
         val ctx = Main.sAppCtx ?: return
         val now = SystemClock.uptimeMillis()
         if (open) {
