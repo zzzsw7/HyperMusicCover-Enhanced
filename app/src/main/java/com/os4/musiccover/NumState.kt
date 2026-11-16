@@ -218,6 +218,14 @@ internal object NumState {
     @Volatile private var lastOpenedAt = 0L
 
 
+    /** The module's own list gesture has ended: folded home, or left open as the list. */
+    fun noteSpreadEnd(folded: Boolean) {
+        if (!folding) return
+        suppressUntil = SystemClock.uptimeMillis() + 2500L
+        Xp.log("MCNum: spread end -> " + (if (folded) "folded" else "opened"))
+        writeMemory(!folded, force = true)
+    }
+
     /**
      * The finger let go of the stack: folded (the capsule) or opened (the list). The stack's own
      * hands-up target is its landing scroll, so the fold is told by where it lands against the
