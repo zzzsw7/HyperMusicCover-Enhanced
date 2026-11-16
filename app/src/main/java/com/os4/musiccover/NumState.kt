@@ -163,10 +163,9 @@ internal object NumState {
             // again, and taking it would undo the fold they just made (2026-11-16).
             if (recentlyFolded()) return
             lastOpenedAt = now
-        } else if (recentlyOpened()) {
-            // The module's own settling after an open, not a fold the user asked for.
-            return
         } else {
+            // A fold is the user's (the module's own settle-fold is stopped in handsUp): the
+            // wait after an open made a quick fold-and-lock lose the fold (2026-11-16).
             lastFoldedAt = now
         }
         val p = ctx.getSharedPreferences("hmc_mini", android.content.Context.MODE_PRIVATE)
