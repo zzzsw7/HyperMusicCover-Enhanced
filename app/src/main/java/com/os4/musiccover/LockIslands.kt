@@ -623,6 +623,22 @@ internal object LockIslands {
         runCatching {
             ctx.registerReceiver(object : android.content.BroadcastReceiver() {
                 override fun onReceive(c: android.content.Context, i: android.content.Intent) {
+                    if (i.action == android.content.Intent.ACTION_SCREEN_ON) {
+                        // Still on the lock screen a moment after waking (no face unlock to take
+                        // it away): put the stack where the user left it. With a face unlock the
+                        // keyguard is gone by then and nothing is touched (2026-11-17).
+                        main.postDelayed({
+                            runCatching {
+                                if (Main.screenOn() && Main.keyguardUp()) {
+                                    val open = NumState.rememberedOpen()
+                                    Xp.log("MCNum: wake -> " + (if (open) "opened" else "folded"))
+                                    NumState.goTo(if (open) "LIST" else "NUMBER", anim = false,
+                                        why = "wake memory")
+                                }
+                            }
+                        }, 1200L)
+                        return
+                    }
                     // The user may have folded or opened just before locking: take it now, before
                     // the screen-off folds the stack itself (2026-11-16).
                     // Diagnostic only: what the stack and the island read as the screen goes.
@@ -633,7 +649,10 @@ internal object LockIslands {
                     // The keyguard locks a moment after the screen goes: once then, once to be sure.
                     for (delay in SCREEN_OFF_READS) main.postDelayed({ invalidate("screen off") }, delay)
                 }
-            }, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_OFF))
+            }, android.content.IntentFilter().apply {
+                addAction(android.content.Intent.ACTION_SCREEN_OFF)
+                addAction(android.content.Intent.ACTION_SCREEN_ON)
+            })
         }.onFailure { screenWatch = false }
     }
 
