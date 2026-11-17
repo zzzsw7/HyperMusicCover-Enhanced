@@ -741,26 +741,6 @@ object MiniPlayerRuntime {
             Xp.findClass("com.miui.systemui.notification.MiuiBaseNotifUtil", classLoader)
                 .getDeclaredMethod("isBackgroundBlurOpened", Context::class.java).apply { isAccessible = true }
         }.getOrNull()
-        // Glass for a view that is not there: MIUI puts a blur material on zero-sized, hidden
-        // notification rows while the stack rests folded (NUMBER), and each one then costs an
-        // empty-rect blur every frame - 130 a second measured, ~30% of systemui (2026-11-17).
-        runCatching {
-            val glassCls = Xp.findClass("com.miui.systemui.util.MiGlassCompat", classLoader)
-            val blocked = java.util.concurrent.atomic.AtomicLong()
-            Xp.hookAll(glassCls, "setMiGlassCompat") { chain ->
-                val v = chain.args.firstOrNull() as? View
-                val hidden = v != null && (v.width == 0 || v.height == 0) &&
-                    (v.visibility != View.VISIBLE || !v.isAttachedToWindow)
-                if (hidden) {
-                    if (blocked.incrementAndGet() % 500L == 1L) {
-                        Xp.log("MCPerf: glass skipped for hidden " + v!!.javaClass.name)
-                    }
-                    null
-                } else {
-                    chain.proceed()
-                }
-            }
-        }.onFailure { Xp.log("MCPerf: glass filter failed: " + it) }
         val add = controller.getDeclaredMethod("addCallback", listener).apply { isAccessible = true }
         val ours = java.lang.reflect.Proxy.newProxyInstance(classLoader, arrayOf(listener)) { self, m, args ->
             when (m.name) {

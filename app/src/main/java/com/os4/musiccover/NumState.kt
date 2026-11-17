@@ -64,11 +64,6 @@ internal object NumState {
             return
         }
         runCatching {
-            glassClear = Xp.findClass("com.miui.systemui.util.MiGlassCompat", classLoader)
-                .getDeclaredMethod("setMiGlassCompat", android.view.View::class.java, FloatArray::class.java)
-                .apply { isAccessible = true }
-        }
-        runCatching {
             for ((name, value) in listOf("enterNumState" to true, "exitNumState" to false)) {
                 Xp.hookAll(vmClass, name) { chain ->
                     val result = chain.proceed()
@@ -79,10 +74,6 @@ internal object NumState {
                         trace("MCNum: " + (if (value) "folded" else "opened")
                             + " (driving=" + driving.ifEmpty { "external" } + ")")
                         if (!value) lastOpenedAt = SystemClock.uptimeMillis()
-                        // Folded to the count: MIUI keeps a blur material on every hidden row and
-                        // blurs an empty rect each frame - ~130 a second, ~40% of systemui. Take
-                        // the material off the rows that are not there (2026-11-17).
-                        if (value) main.postDelayed({ clearHiddenGlass() }, 400L)
                         scheduleRemember(!value)
                         listeners.forEach { runCatching { it(value) } }
                     }
@@ -129,25 +120,6 @@ internal object NumState {
             }
 
         }.onFailure { Xp.log("MCNum: artwork motion hooks unavailable: $it") }
-    }
-
-    /** MiGlassCompat.setMiGlassCompat(View, float[]), to take a material off a hidden row. */
-    private var glassClear: java.lang.reflect.Method? = null
-
-    private fun clearHiddenGlass() {
-        val m = glassClear ?: return
-        val stack = MiniPlayerRuntime.stackForProbe() ?: return
-        var cleared = 0
-        fun walk(v: android.view.View) {
-            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
-            // Hidden either way: no size, not shown (an ancestor gone), or transparent - the fold
-            // leaves rows in all three (2026-11-17).
-            if ((v.width == 0 && v.height == 0) || !v.isShown || v.alpha < 0.01f) {
-                runCatching { m.invoke(null, v, null) }.onSuccess { cleared++ }
-            }
-        }
-        runCatching { walk(stack) }
-        Xp.log("MCNum: glass cleared on " + cleared + " hidden views (method=" + (glassClear != null) + ")")
     }
 
     fun addListener(l: (Boolean) -> Unit) { listeners.addIfAbsent(l) }
