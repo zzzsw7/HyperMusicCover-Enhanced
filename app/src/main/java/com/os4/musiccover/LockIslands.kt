@@ -1260,10 +1260,6 @@ internal object LockIslands {
     private var creationField: java.lang.reflect.Field? = null
     private var creationUnreadable = false
 
-    /** Chat apps kept as their own island, like the system keeps a verification code. */
-    private val FOCUS_AS_ISLAND = setOf("com.tencent.mm")
-    private var forcedFocusLogAt = 0L
-
     private fun readFresh(sbn: StatusBarNotification, n: Notification, redacted: Boolean,
                           created: Long, entry: Any): Note? {
         if (n.extras.containsKey(Notification.EXTRA_MEDIA_SESSION)) return null
@@ -1277,17 +1273,7 @@ internal object LockIslands {
             ?: extras?.getCharSequence(Notification.EXTRA_TEXT)
             ?: (if (redacted) null else extras?.getCharSequence(Notification.EXTRA_BIG_TEXT))
             ?: if (redacted) hiddenText() else ""
-        var focus = runCatching { focusCheck?.invoke(null, n) as? Boolean }.getOrNull() == true
-        // Apps the user wants standing on their own, the way a verification code does: the note
-        // becomes a focus island of its own instead of joining the one stack island, so its pill
-        // is separate and opening it shows that app's notification alone (2026-11-17).
-        if (!focus && sbn.packageName in FOCUS_AS_ISLAND) {
-            focus = true
-            if (forcedFocusLogAt == 0L) {
-                forcedFocusLogAt = android.os.SystemClock.uptimeMillis()
-                Xp.log("MCIsland: " + sbn.packageName + " kept as its own island")
-            }
-        }
+        val focus = runCatching { focusCheck?.invoke(null, n) as? Boolean }.getOrNull() == true
         val island = islandParams(n)
         val order = island?.optBoolean("islandOrder", false) ?: false
         // Shown in full, a focus notification's row is its template, not its title and text:
