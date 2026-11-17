@@ -9962,7 +9962,16 @@ private class MiniPlayerController(
         // A package's own pill is pulled open as it is tapped open: the list, with no row of its
         // own to fly into (2026-11-17).
         if (key.startsWith(LockIslands.PKG_KEY_PREFIX)) {
-            LockIslands.release(key)
+            // The stack pill's pull, exactly: the finger opens the module's spread. The pill goes
+            // at the touch (pkgHidden) and is never left lifted under the finger - handed back to
+            // the spread, which carries the lift on. Only answered here, it stayed up in the air
+            // where the finger left it (the user, 2026-11-17).
+            LockIslands.hidePkgPill()
+            val finger = SpreadFinger(startY)
+            if (colorOs()) player?.let { it.holdNudge(); finger.lift = -it.nudgeY } else player?.springNudgeBack(0f, 0f)
+            springSmallNudgeBack(0f, 0f)
+            MiniPlayerRuntime.noteTouch("spread pull (package pill) lift=${"%.1f".format(finger.lift)}")
+            openSpread("pull", finger)
             return true
         }
         if (key == STACK_ISLAND && LockIslands.foldsNatively()) {
