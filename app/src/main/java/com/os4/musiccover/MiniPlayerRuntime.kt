@@ -9229,6 +9229,8 @@ private class MiniPlayerController(
         if (cameHome != null) preferredSmall = if (smallTaken) smallKey else cameHome
         snapSmallOnce = smallTaken || cameHome == null
         spreadTrace("spread end ($why) folded=$folded")
+        Xp.log("MCNum: probe gesture folded=" + folded + " state=" + NumState.state()
+            + " why=" + why)
         MiniPlayerRuntime.noteTouch("spread end ($why) folded=$folded")
         // The user's own gesture has just ended: folded home or left as the list, that is the
         // state they are leaving the lock screen in (2026-11-16). Taken here, before the stack

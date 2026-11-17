@@ -391,6 +391,8 @@ internal object LockIslands {
         if (out != stackOut) {
             stackOut = out
             NumState.trace("$why: island ${if (out) "out" else "in"}")
+            Xp.log("MCNum: probe island " + (if (out) "out" else "in") + " state="
+                + NumState.state() + " why=" + why)
         }
         publish()
     }
@@ -623,6 +625,9 @@ internal object LockIslands {
                 override fun onReceive(c: android.content.Context, i: android.content.Intent) {
                     // The user may have folded or opened just before locking: take it now, before
                     // the screen-off folds the stack itself (2026-11-16).
+                    // Diagnostic only: what the stack and the island read as the screen goes.
+                    Xp.log("MCNum: probe screen-off state=" + NumState.state()
+                        + " out=" + stackIsOut() + " mem=" + NumState.rememberedOpen())
                     NumState.flushPending()
 
                     // The keyguard locks a moment after the screen goes: once then, once to be sure.
