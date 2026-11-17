@@ -198,9 +198,11 @@ internal object NumState {
         // folded into, "LIST" the rows pulled out. Anything else is the pile in between, which is
         // not a state they can leave (2026-11-16).
         val s = state()
+        // The module's capsule is the pile (STACK); its list is LIST. NUMBER is the system's own
+        // "N notifications" fold, which the islands do not use for the capsule (2026-11-16).
         val open = when (s) {
             "LIST" -> true
-            "NUMBER" -> false
+            "STACK", "NUMBER" -> false
             else -> null
         }
         Xp.log("MCNum: screen off -> " + s + " => " + (if (open == true) "opened" else if (open == false) "folded" else "not a state"))
@@ -267,7 +269,7 @@ internal object NumState {
                 if (!ready) { attempt(n + 1); return@postDelayed }
                 val open = rememberedOpen()
                 Xp.log("MCNum: wake -> " + (if (open) "opened" else "folded") + " (try " + n + ")")
-                goTo(if (open) "LIST" else "NUMBER", anim = false, why = "wake memory")
+                goTo(if (open) "LIST" else "STACK", anim = false, why = "wake memory")
             }, if (n == 0) 700L else 500L)
         }
         attempt(0)
