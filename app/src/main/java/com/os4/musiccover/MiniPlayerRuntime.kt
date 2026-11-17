@@ -10105,6 +10105,12 @@ private class MiniPlayerController(
     /** A notification's row in the stack, by its key. */
     private fun rowFor(key: String): View? = findRow(key)?.first
 
+    /** The list filter: a row of the open package stays, every other one goes (2026-11-17). */
+    fun filterRow(key: String, keep: Boolean) {
+        val row = rowFor(key) ?: return
+        if (keep) showRow(row) else hideRow(row)
+    }
+
     /** [rowFor], for MiniPlayerRuntime.rowOf. */
     fun rowOf(key: String): View? = rowFor(key)
 

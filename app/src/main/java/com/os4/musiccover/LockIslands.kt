@@ -37,6 +37,13 @@ internal object LockIslands {
     private var pkgNotes: List<Note> = emptyList()
     private var pkgMembers: Map<String, List<String>> = emptyMap()
 
+    /** Set while the list was opened from one package's pill: only its rows are shown. */
+    @Volatile var listFilterPkg: String? = null
+
+    fun filterMemberKeys(): Set<String>? = listFilterPkg?.let { pkgMembers[it]?.toSet() }
+
+    fun allMemberKeys(): List<String> = stackMembers + pkgMembers.values.flatten()
+
     /** One notification as an island. */
     class Note(
         val key: String,
@@ -503,7 +510,15 @@ internal object LockIslands {
     /** A tapped island goes back into the stack, for the rest of this lock screen. */
     fun release(key: String) { android.os.Trace.beginSection("MC li.release"); try {
         if ((key == STACK_KEY || key.startsWith(PKG_KEY_PREFIX)) && nativeStack) {
+            // Opened from a package's own pill: the list shows that package's rows alone.
+            listFilterPkg = if (key.startsWith(PKG_KEY_PREFIX))
+                key.removePrefix(PKG_KEY_PREFIX) else null
             openStack("released")
+            if (listFilterPkg != null) {
+                for (delay in longArrayOf(300L, 800L, 1500L)) {
+                    main.postDelayed({ MiniPlayerRuntime.applyListFilter() }, delay)
+                }
+            }
             return
         }
         if (key == STACK_KEY) {
@@ -535,6 +550,7 @@ internal object LockIslands {
             return
         }
         if (key == STACK_KEY) {
+            listFilterPkg = null
             if (stackOut) {
                 stackOut = false
                 invalidate("stack recaptured")
