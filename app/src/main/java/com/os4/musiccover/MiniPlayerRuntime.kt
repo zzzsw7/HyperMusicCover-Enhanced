@@ -1875,6 +1875,15 @@ object MiniPlayerRuntime {
     }
 
     /** The media card dismissed, its session still alive (Main.sCardRemoved). */
+    /**
+     * Locking with no card out: whatever the key still says, the user left the card away, so the
+     * memory goes. Locking with a card out keeps it (2026-11-17).
+     */
+    @JvmStatic fun syncMemoryAtScreenOff() {
+        val out = live().any { runCatching { it.cardIsOutNow() }.getOrDefault(false) }
+        if (!out) rememberExpanded(null)
+    }
+
     @JvmStatic fun mediaCardRemoved() {
         resetDynamicChoice("media card dismissed")
         live().forEach { it.onMediaCardRemoved() }
