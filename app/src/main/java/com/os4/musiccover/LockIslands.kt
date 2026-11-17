@@ -627,7 +627,7 @@ internal object LockIslands {
                     // the screen-off folds the stack itself (2026-11-16).
                     // Diagnostic only: what the stack and the island read as the screen goes.
                     Xp.log("MCNum: probe screen-off state=" + NumState.state()
-                        + " out=" + stackIsOut() + " mem=" + NumState.rememberedOpen())
+                        + " mem=" + NumState.rememberedOpen())
                     NumState.flushPending()
 
                     // The keyguard locks a moment after the screen goes: once then, once to be sure.
