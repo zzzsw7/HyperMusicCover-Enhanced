@@ -194,8 +194,17 @@ internal object NumState {
      * (2026-11-16).
      */
     fun rememberScreenOff() {
-        val open = LockIslands.stackIsOut()
-        Xp.log("MCNum: screen off -> " + (if (open) "opened" else "folded"))
+        // The stack's own reading, not the island's cached one: "NUMBER" is the capsule the user
+        // folded into, "LIST" the rows pulled out. Anything else is the pile in between, which is
+        // not a state they can leave (2026-11-16).
+        val s = state()
+        val open = when (s) {
+            "LIST" -> true
+            "NUMBER" -> false
+            else -> null
+        }
+        Xp.log("MCNum: screen off -> " + s + " => " + (if (open == true) "opened" else if (open == false) "folded" else "not a state"))
+        if (open == null) return
         suppressUntil = SystemClock.uptimeMillis() + 5000L
         writeMemory(open, force = true)
     }
