@@ -7443,7 +7443,7 @@ private class MiniPlayerController(
      * The stack island tapped or pulled open: the whole row out. With another motion under way -
      * a card out, a switch, a flight - only the stack opens, as it did before (openStack).
      */
-    private fun openSpread(why: String, finger: SpreadFinger? = null) { android.os.Trace.beginSection("MC openSpread"); try {
+    private fun openSpread(why: String, finger: SpreadFinger? = null, filterPkg: String? = null) { android.os.Trace.beginSection("MC openSpread"); try {
         if (spread != null) return
         val busy = morph != null || exchange != null || noteMorphKey != null || group != null ||
             flight != null
@@ -7480,10 +7480,22 @@ private class MiniPlayerController(
         }
         // Pulled up from a notification island, the list can open without the media player in it.
         val noPlayer = big != MUSIC_ISLAND && config.optBoolean(MiniPlayerConfig.LIST_WITHOUT_PLAYER)
-        val items = islandKeys.filter { it != STACK_ISLAND && !(noPlayer && it == MUSIC_ISLAND) }
-            .map { SpreadItem(it, seatOf(it)) } +
-            out.map { SpreadItem(it, SEAT_HIDDEN, wasOut = true) }
-        val s = Spread(items, if (STACK_ISLAND in islandKeys) seatOf(STACK_ISLAND) else SEAT_NONE)
+        // Opened from a package's own pill: the list is that package's notifications alone - the
+        // module's own list, so no MIUI row is hidden or restored behind the user's back
+        // (2026-11-17).
+        fun allowed(k: String) = filterPkg == null || LockIslands.noteFor(k)?.pkg == filterPkg
+        val items = islandKeys.filter {
+            it != STACK_ISLAND && !(noPlayer && it == MUSIC_ISLAND) && allowed(it)
+        }.map { SpreadItem(it, seatOf(it)) } +
+            out.filter { allowed(it) }.map { SpreadItem(it, SEAT_HIDDEN, wasOut = true) }
+        if (filterPkg != null && items.isEmpty()) {
+            spreadTrace("no rows for $filterPkg; the stack alone")
+            LockIslands.openStack(why)
+            return
+        }
+        val s = Spread(items,
+            if (filterPkg != null) SEAT_NONE
+            else if (STACK_ISLAND in islandKeys) seatOf(STACK_ISLAND) else SEAT_NONE)
         // Before the list moves the row: open, the capsule's rest rode up with the notifications,
         // and the card folded into a capsule 250px over its place, then dropped (2026-10-21).
         s.home = player?.restBoxOnScreen()
