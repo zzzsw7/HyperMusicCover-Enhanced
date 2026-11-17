@@ -71,7 +71,7 @@ internal object NumState {
                     if (inNumber != value) {
                         inNumber = value
                         trace(if (value) "stack folded" else "stack opened")
-                        Xp.log("MCNum: " + (if (value) "folded" else "opened")
+                        trace("MCNum: " + (if (value) "folded" else "opened")
                             + " (driving=" + driving.ifEmpty { "external" } + ")")
                         if (!value) lastOpenedAt = SystemClock.uptimeMillis()
                         scheduleRemember(!value)
@@ -151,10 +151,15 @@ internal object NumState {
     }
 
     /** The stack is to come up opened: the user last left it that way. */
+    @Volatile private var memOpen: Boolean? = null
+
     fun rememberedOpen(): Boolean {
+        memOpen?.let { return it }
         val ctx = Main.sAppCtx ?: return false
-        return ctx.getSharedPreferences("hmc_mini", android.content.Context.MODE_PRIVATE)
+        val v = ctx.getSharedPreferences("hmc_mini", android.content.Context.MODE_PRIVATE)
             .getBoolean(PREF_OPEN, false)
+        memOpen = v
+        return v
     }
 
     /**
@@ -207,13 +212,13 @@ internal object NumState {
         // A gesture a moment ago is the user's latest word - the screen going off must not undo
         // it (2026-11-17).
         if (open == null || SystemClock.uptimeMillis() - lastChoiceAt < 3000L) {
-            Xp.log("MCNum: screen off -> " + s + " => left as is")
+            trace("MCNum: screen off -> " + s + " => left as is")
             return
         }
         pendingOpen = null
         rememberGen++
         main.removeCallbacks(rememberRun)
-        Xp.log("MCNum: screen off -> " + s + " => " + (if (open) "opened" else "folded"))
+        trace("MCNum: screen off -> " + s + " => " + (if (open) "opened" else "folded"))
         writeMemory(open, force = true)
     }
 
@@ -224,9 +229,9 @@ internal object NumState {
         val p = ctx.getSharedPreferences("hmc_mini", android.content.Context.MODE_PRIVATE)
         if (p.getBoolean(PREF_OPEN, false) != open) {
             p.edit().putBoolean(PREF_OPEN, open).apply()
+            memOpen = open
             trace(if (open) "remembered: opened" else "remembered: folded")
-            Xp.log("MCNum: remembered " + (if (open) "opened" else "folded")
-                + " (suppress=" + (SystemClock.uptimeMillis() < suppressUntil) + ")")
+
             // The wake reads the stack's default from the model's flow, and folding was turned on
             // only once: leaving the flow as it was meant the next wake opened the list anyway
             // (2026-11-16). Put it at what the user just chose.
@@ -248,7 +253,7 @@ internal object NumState {
     fun noteSpreadEnd(folded: Boolean) {
         if (!folding) return
         suppressUntil = SystemClock.uptimeMillis() + 2500L
-        Xp.log("MCNum: spread end -> " + (if (folded) "folded" else "opened"))
+        trace("MCNum: spread end -> " + (if (folded) "folded" else "opened"))
         writeMemory(!folded, force = true)
     }
 
@@ -272,8 +277,8 @@ internal object NumState {
         // Landing at (or below) the folded stack's own place: folded. Anything further up is the
         // list being left open.
         val folded = bySpread || (number != null && target <= number + 24f)
-        Xp.log("MCNum: gesture target=" + target + " number=" + number + " spread=" + bySpread
-            + " -> " + (if (folded) "folded" else "opened"))
+        trace("gesture target=" + target + " number=" + number + " -> "
+            + (if (folded) "folded" else "opened"))
         suppressUntil = SystemClock.uptimeMillis() + 2500L
         writeMemory(!folded, force = true)
     }
@@ -310,12 +315,12 @@ internal object NumState {
         // the open - a fold asked for later is the user's own.
         if (recentlyOpened()) {
             trace("hands up at the pile: left open (just opened by the user)")
-            Xp.log("MCNum: hands up left open (just opened by the user)")
+            trace("MCNum: hands up left open (just opened by the user)")
             return null
         }
         val number = number()
         trace("hands up at the pile: folded instead ($target -> $number)")
-        Xp.log("MCNum: hands up folded instead (target=$target -> $number)")
+        trace("MCNum: hands up folded instead (target=$target -> $number)")
         return number
     }
 
@@ -560,7 +565,7 @@ internal object NumState {
                 Xp.callMethod(flow, "setValue", stateConst(model, remembered))
                 forcedDefault = true
                 trace("default $remembered (in memory)")
-                Xp.log("MCNum: default " + remembered + " (in memory)")
+                trace("MCNum: default " + remembered + " (in memory)")
             } else if (forcedDefault) {
                 forcedDefault = false
                 val setting = android.provider.Settings.System.getInt(
@@ -577,8 +582,15 @@ internal object NumState {
      * show (after SystemUI starts, the first lock screen has not been through a wake), and
      * never while the stack is being moved or is the list the user opened.
      */
+    @Volatile private var lastFoldAsk = 0L
+
     fun foldIfPiled(why: String) {
         if (!folding) return
+        // The notifications change several times in a row while the stack settles: one check is
+        // enough, and each one costs a state read and a scroll query (2026-11-17).
+        val nowMs = SystemClock.uptimeMillis()
+        if (nowMs - lastFoldAsk < 300L) return
+        lastFoldAsk = nowMs
         main.removeCallbacks(foldCheck)
         foldWhy = why
         main.postDelayed(foldCheck, FOLD_SETTLE_MS)
@@ -593,7 +605,7 @@ internal object NumState {
         if (LockIslands.keepsPileOnFold()) return@Runnable
         if (LockIslands.spreadingNow()) { trace("pile check skipped: spread ($foldWhy)"); return@Runnable }
         if (busy()) { foldIfPiled(foldWhy); return@Runnable }
-        Xp.log("MCNum: fold check why=" + foldWhy + " state=" + state()
+        trace("fold check why=" + foldWhy + " state=" + state()
             + " rememberedOpen=" + rememberedOpen() + " busy=" + busy())
         // Only the pulled-out list needs doing: folded is the module's own default, so the wake
         // leaves it alone. Opened is put back whatever the lock screen came up in (2026-11-17).

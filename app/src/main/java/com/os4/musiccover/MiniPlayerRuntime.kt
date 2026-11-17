@@ -74,12 +74,23 @@ object MiniPlayerRuntime {
         val p = prefs(ctx)
         if (key.isNullOrEmpty()) p.edit().remove(PREF_EXPANDED).apply()
         else p.edit().putString(PREF_EXPANDED, key).apply()
+        memExpanded = key
+        memExpandedLoaded = true
         Xp.log("MCMini: remembered expanded card = " + (key?.takeLast(12) ?: "none"))
     }
 
+    /** Cached copy: this is read at the end of every refresh while the lock screen is up. */
+    @Volatile private var memExpanded: String? = null
+    @Volatile private var memExpandedLoaded = false
+
     /** The card the user last left expanded, or null when they collapsed everything. */
-    @JvmStatic fun rememberedExpanded(context: Context): String? =
-        prefs(context).getString(PREF_EXPANDED, null)
+    @JvmStatic fun rememberedExpanded(context: Context): String? {
+        if (memExpandedLoaded) return memExpanded
+        val v = prefs(context).getString(PREF_EXPANDED, null)
+        memExpanded = v
+        memExpandedLoaded = true
+        return v
+    }
 
     /** Only automatic cover entry changes; manual entry and existing scenes stay intact. */
     @JvmStatic fun mediaCollapsedByDefault(context: Context?): Boolean =
@@ -11697,8 +11708,8 @@ private class MiniPlayerController(
         // The music's "island" is not a released row - it is the constant key the module uses for
         // its own card - so it never passes the check below. Ask for it directly.
         if (want == MUSIC_ISLAND) {
-            if (++restoreTries <= 20 && player == null) {
-                handler.postDelayed({ scheduleRefresh() }, 300)
+            if (++restoreTries <= 8 && player == null) {
+                handler.postDelayed({ scheduleRefresh() }, 500)
                 return
             }
             restoreTries = 0
@@ -11714,7 +11725,7 @@ private class MiniPlayerController(
                 restoreReleased = true
                 LockIslands.release(want)
             }
-            if (++restoreTries <= 20) handler.postDelayed({ scheduleRefresh() }, 300)
+            if (++restoreTries <= 8) handler.postDelayed({ scheduleRefresh() }, 500)
             else restoreTries = 0
             restoreLog("restore: row " + want.takeLast(12) + " missing (try " + restoreTries
                     + ") have=" + LockIslands.releasedKeys().joinToString(",") { it.takeLast(10) })
