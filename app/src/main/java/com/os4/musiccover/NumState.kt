@@ -251,14 +251,17 @@ internal object NumState {
      */
     fun applyRememberedOnWake() {
         if (!folding) return
-        main.postDelayed({
-            runCatching {
-                if (!Main.screenOn() || !Main.keyguardUp()) return@postDelayed
+        fun attempt(n: Int) {
+            if (n > 4) return
+            main.postDelayed({
+                val ready = runCatching { Main.screenOn() && Main.keyguardUp() }.getOrDefault(false)
+                if (!ready) { attempt(n + 1); return@postDelayed }
                 val open = rememberedOpen()
-                Xp.log("MCNum: wake -> " + (if (open) "opened" else "folded"))
+                Xp.log("MCNum: wake -> " + (if (open) "opened" else "folded") + " (try " + n + ")")
                 goTo(if (open) "LIST" else "NUMBER", anim = false, why = "wake memory")
-            }
-        }, 700L)
+            }, if (n == 0) 700L else 500L)
+        }
+        attempt(0)
     }
 
     fun rememberModuleState(open: Boolean) {
