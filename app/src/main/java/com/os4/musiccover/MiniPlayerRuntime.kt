@@ -5681,6 +5681,9 @@ private class MiniPlayerController(
      * waiting on the card lets go of it. A switch waited on a card being laid out that never
      * would be, and the notifications' islands stopped answering with it (PR #15).
      */
+    /** Whether this controller has a card out right now (for the memory at screen off). */
+    fun cardIsOutNow(): Boolean = expandedKey() != null
+
     fun onMediaCardRemoved() {
         exchange?.let { x ->
             if (x.expanded == MUSIC_ISLAND) x.expanded = null

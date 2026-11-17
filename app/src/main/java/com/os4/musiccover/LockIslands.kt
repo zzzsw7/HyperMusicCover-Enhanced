@@ -629,6 +629,9 @@ internal object LockIslands {
                     Xp.log("MCNum: probe screen-off state=" + NumState.state()
                         + " mem=" + NumState.rememberedOpen())
                     NumState.flushPending()
+                    // Nothing out as the screen goes: the user left the media card away, so the
+                    // key that would put it back on the next lock is dropped (2026-11-17).
+                    MiniPlayerRuntime.syncMemoryAtScreenOff()
 
                     // The keyguard locks a moment after the screen goes: once then, once to be sure.
                     for (delay in SCREEN_OFF_READS) main.postDelayed({ invalidate("screen off") }, delay)
