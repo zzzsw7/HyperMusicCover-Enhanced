@@ -11477,23 +11477,8 @@ private class MiniPlayerController(
         controller?.sessionToken?.let(MiniPlayerRuntime::selectMini)
     }
 
-    /** Diagnostic: how often the whole pipeline runs (per 10 s), to see if progress updates are
-     *  dragging the full refresh along with them (2026-11-17). */
-    private var refreshCount = 0
-    private var refreshSince = 0L
-
     fun refresh() {
         if (Looper.myLooper() != Looper.getMainLooper()) { scheduleRefresh(); return }
-        runCatching {
-            refreshCount++
-            val now = android.os.SystemClock.uptimeMillis()
-            if (refreshSince == 0L) refreshSince = now
-            if (now - refreshSince >= 10000L) {
-                Xp.log("MCPerf: refresh " + refreshCount + " in " + ((now - refreshSince) / 1000L) + "s")
-                refreshCount = 0
-                refreshSince = now
-            }
-        }
         runCatching { refreshUnsafe() }.onFailure { Xp.w("MCMini: refresh failed: $it") }
     }
 
