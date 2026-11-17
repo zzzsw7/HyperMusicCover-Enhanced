@@ -37,13 +37,6 @@ internal object LockIslands {
     private var pkgNotes: List<Note> = emptyList()
     private var pkgMembers: Map<String, List<String>> = emptyMap()
 
-    /** Set while the list was opened from one package's pill: only its rows are shown. */
-    @Volatile var listFilterPkg: String? = null
-
-    fun filterMemberKeys(): Set<String>? = listFilterPkg?.let { pkgMembers[it]?.toSet() }
-
-    fun allMemberKeys(): List<String> = stackMembers + pkgMembers.values.flatten()
-
     /** One notification as an island. */
     class Note(
         val key: String,
@@ -510,14 +503,7 @@ internal object LockIslands {
     /** A tapped island goes back into the stack, for the rest of this lock screen. */
     fun release(key: String) { android.os.Trace.beginSection("MC li.release"); try {
         if ((key == STACK_KEY || key.startsWith(PKG_KEY_PREFIX)) && nativeStack) {
-            // Opened from a package's own pill: the list shows that package's rows alone.
-            val pkg = if (key.startsWith(PKG_KEY_PREFIX)) key.removePrefix(PKG_KEY_PREFIX) else null
-            openStack("released", pkg = pkg)
-            if (pkg != null) {
-                for (delay in longArrayOf(300L, 800L, 1500L)) {
-                    main.postDelayed({ MiniPlayerRuntime.applyListFilter() }, delay)
-                }
-            }
+            openStack("released")
             return
         }
         if (key == STACK_KEY) {
@@ -549,7 +535,6 @@ internal object LockIslands {
             return
         }
         if (key == STACK_KEY) {
-            listFilterPkg = null
             if (stackOut) {
                 stackOut = false
                 invalidate("stack recaptured")
@@ -574,11 +559,7 @@ internal object LockIslands {
      * row at once rather than when the stack says it has left its fold - a frame or two later,
      * with the pill showing a notification whose rows are already coming out under it.
      */
-    fun openStack(why: String, scroll: Boolean = true, pkg: String? = null) {
-        // Every open says what it shows: a package's own rows, or the whole list. Clear here
-        // rather than at each caller - the stack's own pill opens without going through
-        // release(), and it was inheriting the package filter (2026-11-17).
-        listFilterPkg = pkg
+    fun openStack(why: String, scroll: Boolean = true) {
         // Not scrolled (no model to ask): the island stays, or nothing would be left to tap.
         // [scroll] false: a finger scrolls it (the spread pulled open) - only the island goes.
         if (scroll) beginNotificationListArtwork()
