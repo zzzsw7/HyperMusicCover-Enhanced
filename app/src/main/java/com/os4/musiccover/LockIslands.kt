@@ -394,9 +394,7 @@ internal object LockIslands {
         if (out != stackOut) {
             stackOut = out
             NumState.trace("$why: island ${if (out) "out" else "in"}")
-            // The user's capsule is folded into the island or out as the list: the state to keep
-            // across a lock screen (2026-11-16).
-            NumState.rememberModuleState(out)
+
         }
         publish()
     }
@@ -628,9 +626,9 @@ internal object LockIslands {
             ctx.registerReceiver(object : android.content.BroadcastReceiver() {
                 override fun onReceive(c: android.content.Context, i: android.content.Intent) {
                     if (i.action == android.content.Intent.ACTION_SCREEN_ON) {
-                        // The wake's own settling reports the stack out before the user has done
-                        // anything: that must not be taken as their choice (2026-11-16).
-                        NumState.noteScreenOn()
+                        // The lock screen comes up folded by default: put it back the way the user
+                        // left it, once, and nothing else writes this memory (2026-11-16).
+                        NumState.applyRememberedOnWake()
                         return
                     }
                     // The user may have folded or opened just before locking: take it now, before

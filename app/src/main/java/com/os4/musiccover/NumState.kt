@@ -244,6 +244,23 @@ internal object NumState {
         screenOnAt = SystemClock.uptimeMillis()
     }
 
+    /**
+     * The wake: the lock screen has come up folded, as it always does. Put it back the way the
+     * user left it, once - opened stays opened, folded stays folded. Asked a moment after the
+     * screen is on so the stack has something to scroll (2026-11-16).
+     */
+    fun applyRememberedOnWake() {
+        if (!folding) return
+        main.postDelayed({
+            runCatching {
+                if (!Main.screenOn() || !Main.keyguardUp()) return@postDelayed
+                val open = rememberedOpen()
+                Xp.log("MCNum: wake -> " + (if (open) "opened" else "folded"))
+                goTo(if (open) "LIST" else "NUMBER", anim = false, why = "wake memory")
+            }
+        }, 700L)
+    }
+
     fun rememberModuleState(open: Boolean) {
         if (!Main.keyguardUp() || !Main.screenOn()) return
         if (screenOnAt != 0L && SystemClock.uptimeMillis() - screenOnAt < 3000L) return
