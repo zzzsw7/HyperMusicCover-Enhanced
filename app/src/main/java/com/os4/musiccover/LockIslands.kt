@@ -37,9 +37,6 @@ internal object LockIslands {
     private var pkgNotes: List<Note> = emptyList()
     private var pkgMembers: Map<String, List<String>> = emptyMap()
 
-    /** The package whose list is open, if any. */
-    @Volatile var listFilterPkg: String? = null
-
     /** One notification as an island. */
     class Note(
         val key: String,
@@ -505,14 +502,7 @@ internal object LockIslands {
 
     /** A tapped island goes back into the stack, for the rest of this lock screen. */
     fun release(key: String) { android.os.Trace.beginSection("MC li.release"); try {
-        Xp.log("MCIsland: release " + key.takeLast(16))
-        if (key.startsWith(PKG_KEY_PREFIX)) {
-            // Its own pill: the module's own list, filtered to that package.
-            listFilterPkg = key.removePrefix(PKG_KEY_PREFIX)
-            MiniPlayerRuntime.openPackageSpread(key.removePrefix(PKG_KEY_PREFIX))
-            return
-        }
-        if (key == STACK_KEY && nativeStack) {
+        if ((key == STACK_KEY || key.startsWith(PKG_KEY_PREFIX)) && nativeStack) {
             openStack("released")
             return
         }
