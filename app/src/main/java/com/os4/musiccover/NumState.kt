@@ -140,12 +140,14 @@ internal object NumState {
         var cleared = 0
         fun walk(v: android.view.View) {
             if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
-            if (v.width == 0 && v.height == 0) {
+            // Hidden either way: no size, not shown (an ancestor gone), or transparent - the fold
+            // leaves rows in all three (2026-11-17).
+            if ((v.width == 0 && v.height == 0) || !v.isShown || v.alpha < 0.01f) {
                 runCatching { m.invoke(null, v, null) }.onSuccess { cleared++ }
             }
         }
         runCatching { walk(stack) }
-        if (cleared > 0) Xp.log("MCNum: glass cleared on " + cleared + " hidden views")
+        Xp.log("MCNum: glass cleared on " + cleared + " hidden views (method=" + (glassClear != null) + ")")
     }
 
     fun addListener(l: (Boolean) -> Unit) { listeners.addIfAbsent(l) }
