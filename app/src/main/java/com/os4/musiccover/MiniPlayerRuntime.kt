@@ -9315,6 +9315,13 @@ private class MiniPlayerController(
      * small island into the pill and opened it from there - two motions where one was asked for.
      */
     fun expandNote(key: String) { android.os.Trace.beginSection("MC expandNote"); try {
+        // A package's own pill has no native row to fly to: its list is the module's own,
+        // filtered to that package, opened here and now (2026-11-17).
+        if (key.startsWith(LockIslands.PKG_KEY_PREFIX)) {
+            openSpread("pkg " + key.removePrefix(LockIslands.PKG_KEY_PREFIX),
+                filterPkg = key.removePrefix(LockIslands.PKG_KEY_PREFIX))
+            return
+        }
         // Folded natively (LockIslands.nativeStack), the stack island opens as the stack's own
         // list, ColorOS's way: the island leaves the row and the rows come out of the fold where
         // they are. No flight: the rows were never out of the stack for one to land on.
