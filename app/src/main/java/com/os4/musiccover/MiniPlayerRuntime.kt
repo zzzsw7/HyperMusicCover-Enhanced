@@ -741,6 +741,26 @@ object MiniPlayerRuntime {
             Xp.findClass("com.miui.systemui.notification.MiuiBaseNotifUtil", classLoader)
                 .getDeclaredMethod("isBackgroundBlurOpened", Context::class.java).apply { isAccessible = true }
         }.getOrNull()
+        // Diagnostic only: who puts glass on a zero-sized view - that is the empty-rect blur drawn
+        // every frame, on the lock screen and in the AOD alike (2026-11-17).
+        runCatching {
+            val glassCls = Xp.findClass("com.miui.systemui.util.MiGlassCompat", classLoader)
+            val lastAt = java.util.HashMap<String, Long>()
+            Xp.hookAll(glassCls, "setMiGlassCompat") { chain ->
+                val v = chain.args.firstOrNull() as? View
+                if (v != null && (v.width == 0 || v.height == 0)) {
+                    val now = android.os.SystemClock.uptimeMillis()
+                    val who = v.javaClass.name
+                    if (now - (lastAt[who] ?: 0L) > 2000L) {
+                        lastAt[who] = now
+                        Xp.log("MCPerf: glass on zero view " + who + " " + v.width + "x" + v.height
+                            + " vis=" + v.visibility + " attached=" + v.isAttachedToWindow
+                            + " parent=" + (v.parent as? View)?.javaClass?.name)
+                    }
+                }
+                chain.proceed()
+            }
+        }.onFailure { Xp.log("MCPerf: glass hook failed: " + it) }
         val add = controller.getDeclaredMethod("addCallback", listener).apply { isAccessible = true }
         val ours = java.lang.reflect.Proxy.newProxyInstance(classLoader, arrayOf(listener)) { self, m, args ->
             when (m.name) {
