@@ -11626,9 +11626,6 @@ private class MiniPlayerController(
         // Started now, before a frame shows the new island at its rest width.
         if (updateFrom != null) startUpdate(updateContent, updateFrom)
         prewarmSpares()
-        val keyguardNow = Main.keyguardUp()
-        if (keyguardNow && !wasKeyguard) armedRestore = true
-        wasKeyguard = keyguardNow
         maybeRestoreExpanded()
     } finally { android.os.Trace.endSection() } }
 
@@ -11659,7 +11656,10 @@ private class MiniPlayerController(
     }
 
     private fun maybeRestoreExpanded() {
-        if (!armedRestore) return
+        // Same rule as the notification group (2026-11-17): the key is written only when the user
+        // opens the card by hand and cleared when they put it away, so whenever it is there and
+        // nothing is out, the card goes back out. No "once per lock" - that was what let a lock
+        // screen come up folded with the memory still saying opened.
         val ctx = Main.sAppCtx ?: return
         val want = MiniPlayerRuntime.rememberedExpanded(ctx)
         if (want.isNullOrEmpty()) { armedRestore = false; return }
