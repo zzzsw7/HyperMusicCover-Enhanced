@@ -1102,11 +1102,7 @@ object MiniPlayerRuntime {
             // had settled, and a finger landing on it meanwhile went to swipe-to-unlock.
             val catcher = live().firstOrNull { it.catchableAt(ev.rawX, ev.rawY) }
             routed = catcher?.pill()?.let(::WeakReference)
-            // A package's pill under the finger: it leaves the row on the touch down, so its swap
-            // out plays while the finger starts the pull (2026-11-17).
-            if (catcher != null && selectedIsland?.startsWith(LockIslands.PKG_KEY_PREFIX) == true) {
-                LockIslands.hidePkgPill()
-            }
+
             if (catcher != null && routed != null) {
                 if (catchDrag(catcher, ev)) {
                     routedTracker = VelocityTracker.obtain()
