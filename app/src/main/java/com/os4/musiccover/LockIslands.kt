@@ -627,6 +627,12 @@ internal object LockIslands {
         runCatching {
             ctx.registerReceiver(object : android.content.BroadcastReceiver() {
                 override fun onReceive(c: android.content.Context, i: android.content.Intent) {
+                    if (i.action == android.content.Intent.ACTION_SCREEN_ON) {
+                        // The wake's own settling reports the stack out before the user has done
+                        // anything: that must not be taken as their choice (2026-11-16).
+                        NumState.noteScreenOn()
+                        return
+                    }
                     // The user may have folded or opened just before locking: take it now, before
                     // the screen-off folds the stack itself (2026-11-16).
                     NumState.rememberScreenOff()
@@ -634,7 +640,10 @@ internal object LockIslands {
                     // The keyguard locks a moment after the screen goes: once then, once to be sure.
                     for (delay in SCREEN_OFF_READS) main.postDelayed({ invalidate("screen off") }, delay)
                 }
-            }, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_OFF))
+            }, android.content.IntentFilter().apply {
+                addAction(android.content.Intent.ACTION_SCREEN_OFF)
+                addAction(android.content.Intent.ACTION_SCREEN_ON)
+            })
         }.onFailure { screenWatch = false }
     }
 

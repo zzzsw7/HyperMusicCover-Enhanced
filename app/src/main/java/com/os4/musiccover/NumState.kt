@@ -237,8 +237,16 @@ internal object NumState {
      * into the bottom island (false) or out as the list (true). That is the state the user sees -
      * the system's own pile in between is not - and it is the one to keep (2026-11-16).
      */
+    /** When the screen came on: the settling after it is the module's, not the user's. */
+    @Volatile private var screenOnAt = 0L
+
+    fun noteScreenOn() {
+        screenOnAt = SystemClock.uptimeMillis()
+    }
+
     fun rememberModuleState(open: Boolean) {
         if (!Main.keyguardUp() || !Main.screenOn()) return
+        if (screenOnAt != 0L && SystemClock.uptimeMillis() - screenOnAt < 3000L) return
         // The screen going off reports one more "out as the list" a moment later (the stack's own
         // going-away), which would undo the fold just kept: that window is held shut (2026-11-16).
         if (SystemClock.uptimeMillis() < suppressUntil) return
