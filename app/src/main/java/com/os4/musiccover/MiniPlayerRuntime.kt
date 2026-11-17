@@ -3093,6 +3093,9 @@ private class MiniPlayerController(
                           flingPx: Float = 0f,
                           /** ColorOS: the next island takes the capsule as a notification comes in (Swap.popIn). */
                           popIn: Boolean = false) {
+        Xp.log("MCPkg: swap start ${oldBig?.takeLast(9)}/${oldSmall?.takeLast(9)} kind=$kind " +
+            "intoSmall=$intoSmall spread=${spread != null} morph=${morph != null} " +
+            "at ${android.os.SystemClock.uptimeMillis()}")
         val view = player ?: return
         // A switch cut short goes on from what it was drawing, at its speed - the super island's
         // folme.to from the current value and velocity. Restarted from rest, the pill lost its
@@ -3674,6 +3677,10 @@ private class MiniPlayerController(
 
     private fun endGhosts() {
         ghostPill?.let {
+            if (it.visibility == View.VISIBLE) {
+                Xp.log("MCPkg: ghost pill gone at ${android.os.SystemClock.uptimeMillis()} " +
+                    "w=${it.width} h=${it.height} a=${"%.2f".format(it.alpha)}")
+            }
             it.endMorph()
             it.setContentBlur(0f)
             it.setContentAlpha(1f)
@@ -7459,6 +7466,8 @@ private class MiniPlayerController(
         val busy = morph != null || exchange != null || noteMorphKey != null || group != null ||
             flight != null
         if (busy || player?.visibility != View.VISIBLE) {
+            Xp.log("MCPkg: spread refused ($why) busy=$busy vis=${player?.visibility} " +
+                "at ${android.os.SystemClock.uptimeMillis()}")
             MiniPlayerRuntime.noteTouch("spread refused ($why): busy=$busy; the stack alone")
             LockIslands.openStack(why)
             return
@@ -11633,6 +11642,8 @@ private class MiniPlayerController(
             // a switch here took the next island's coming-up from its first frame (`op mini`: up done
             // frames=1), and it grows in as a new row instead.
             val oldSmall = smallKey
+            Xp.log("MCPkg: lost sel=${previous?.takeLast(9)} keys=${islandKeys.joinToString(",") { it.takeLast(9) }} " +
+                "small=${oldSmall?.takeLast(9)} spread=${spread != null} at ${android.os.SystemClock.uptimeMillis()}")
             handler.post { if (swap == null && morph == null) startSwap(null, oldSmall, popIn = colorOs()) }
         }
         val view = player ?: MiniPlayerView(context).also {

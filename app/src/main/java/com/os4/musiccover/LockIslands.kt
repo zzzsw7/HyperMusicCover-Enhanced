@@ -44,6 +44,7 @@ internal object LockIslands {
     fun hidePkgPill() {
         if (pkgHidden) return
         pkgHidden = true
+        Xp.log("MCPkg: pill out at ${android.os.SystemClock.uptimeMillis()}")
         invalidate("package pill out")
     }
 
@@ -518,6 +519,7 @@ internal object LockIslands {
             if (key.startsWith(PKG_KEY_PREFIX)) {
                 // The pill goes at the tap, and the list opens the way the stack's own pill
                 // opens it - the module's animation (2026-11-17).
+                Xp.log("MCPkg: release ${key.takeLast(9)} at ${android.os.SystemClock.uptimeMillis()}")
                 hidePkgPill()
                 MiniPlayerRuntime.openStackIsland()
                 return
@@ -579,6 +581,7 @@ internal object LockIslands {
      * with the pill showing a notification whose rows are already coming out under it.
      */
     fun openStack(why: String, scroll: Boolean = true) {
+        Xp.log("MCPkg: stack open ($why) at ${android.os.SystemClock.uptimeMillis()}")
         // Not scrolled (no model to ask): the island stays, or nothing would be left to tap.
         // [scroll] false: a finger scrolls it (the spread pulled open) - only the island goes.
         if (scroll) beginNotificationListArtwork()
@@ -1168,6 +1171,8 @@ internal object LockIslands {
         // stopwatch paused or resumed - its `when` the same - never reached the island.
         if (next.size == notes.size && next.indices.all { next[it] === notes[it] }) return
         notes = next
+        Xp.log("MCPkg: publish pkg=${pkgNotes.size} hidden=$pkgHidden out=$stackOut size=${next.size} " +
+            "at ${android.os.SystemClock.uptimeMillis()} next=" + next.joinToString(",") { it.key.takeLast(9) })
         main.post { listeners.forEach { runCatching { it() } } }
     }
 
