@@ -289,6 +289,12 @@ internal object LockIslands {
 
     /** The stack island tapped open: all of its notifications back in the stack, new ones too. */
     private var stackOut = false
+        private set(value) {
+            field = value
+            // Every way out of the row goes through here, so [followStack]'s hold on a spurious
+            // fold has the moment it went out whichever one it was (2026-11-17).
+            if (value) stackOutAt = android.os.SystemClock.uptimeMillis()
+        }
 
     /**
      * For NumStateProbe: ordinary notifications left in the stack instead of the stack island,
@@ -336,10 +342,7 @@ internal object LockIslands {
     fun setSpread(on: Boolean) {
         if (spreading == on) return
         spreading = on
-        if (on) {
-            beginNotificationListArtwork()
-            stackOpenedAt = android.os.SystemClock.uptimeMillis()
-        }
+        if (on) beginNotificationListArtwork()
         NumState.trace("spread=$on")
         // Over: the island stands as the stack does. A pull let go before the stack ever left its
         // fold said nothing (no exitNumState), and the island taken out for it stayed out.
@@ -409,16 +412,16 @@ internal object LockIslands {
     private fun followStack(why: String) {
         val now = android.os.SystemClock.uptimeMillis()
         val out = !stackFolded()
-        // On its way into the list the stack crosses NUMBER again a few ms after it was asked
-        // for it (traced 2026-11-17 19:48:35.170: 9ms in, 180ms before the next state). The
-        // stack island came back into the row for those frames, and the pill stood over the
-        // list opening under it - the "ghost" left of a package's pill going out. Held out
-        // till the fold that follows, or till the hold runs out: the list really folded back
-        // in the meantime is answered by the re-check, a moment later.
-        if (!out && stackOut && now - stackOpenedAt < STACK_OPEN_HOLD_MS) {
-            NumState.trace("$why: island stays out (asked ${now - stackOpenedAt}ms ago)")
-            main.postDelayed({ followStack("held ${now - stackOpenedAt}ms") },
-                STACK_OPEN_HOLD_MS - (now - stackOpenedAt) + 1L)
+        // The stack reports leaving NUMBER a frame or two before it does: on the way into the list
+        // (traced 2026-11-17 19:48:35.170, 9ms after the island went out) and between the shade's
+        // own states (19:55:17.918, 32ms, with the state still reading NUMBER). The stack island
+        // came back into the row for those frames and the pill stood over the list opening under
+        // it - the flicker left of a package's pill going out. Taken only once the island has been
+        // out a moment: a list really folded back is answered at once, and the re-check after the
+        // hold settles one that folds while it runs.
+        if (!out && stackOut && now - stackOutAt < STACK_OUT_HOLD_MS) {
+            NumState.trace("$why: island stays out (${now - stackOutAt}ms)")
+            main.postDelayed({ followStack("recheck ${now - stackOutAt}ms") }, STACK_OUT_HOLD_MS)
             return
         }
         if (out != stackOut) {
@@ -432,10 +435,10 @@ internal object LockIslands {
         publish()
     }
 
-    /** When the stack was last asked for its list: what [followStack] holds the island out for. */
-    private var stackOpenedAt = 0L
+    /** When the island last went out of the row: what [followStack] holds a spurious fold for. */
+    private var stackOutAt = 0L
 
-    private const val STACK_OPEN_HOLD_MS = 200L
+    private const val STACK_OUT_HOLD_MS = 250L
 
     /** For `op mini`: what the filter has, and whether the stack is leaving it out. */
     fun describe(): String = "islands active=$active cover=$cover filter=${filter?.get() != null} " +
@@ -605,10 +608,7 @@ internal object LockIslands {
         Xp.log("MCPkg: stack open ($why) at ${android.os.SystemClock.uptimeMillis()}")
         // Not scrolled (no model to ask): the island stays, or nothing would be left to tap.
         // [scroll] false: a finger scrolls it (the spread pulled open) - only the island goes.
-        if (scroll) {
-            beginNotificationListArtwork()
-            stackOpenedAt = android.os.SystemClock.uptimeMillis()
-        }
+        if (scroll) beginNotificationListArtwork()
         if (scroll && !NumState.goTo("LIST", why = why).startsWith("scrollY")) {
             notificationArtworkNavigation.reset()
             updateNotificationArtwork()
