@@ -633,7 +633,10 @@ internal object LockIslands {
                     }
                     // The user may have folded or opened just before locking: take it now, before
                     // the screen-off folds the stack itself (2026-11-16).
-                    NumState.rememberScreenOff()
+                    // A fold made just before locking is still animating: taken at the keypress,
+                    // the stack still reads as out. Read it once it has settled - the screen-off
+                    // does not fold the stack itself, so the settled state is the user's.
+                    main.postDelayed({ NumState.rememberScreenOff() }, 900L)
 
                     // The keyguard locks a moment after the screen goes: once then, once to be sure.
                     for (delay in SCREEN_OFF_READS) main.postDelayed({ invalidate("screen off") }, delay)
