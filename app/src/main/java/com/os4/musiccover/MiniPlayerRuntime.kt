@@ -1102,6 +1102,11 @@ object MiniPlayerRuntime {
             // had settled, and a finger landing on it meanwhile went to swipe-to-unlock.
             val catcher = live().firstOrNull { it.catchableAt(ev.rawX, ev.rawY) }
             routed = catcher?.pill()?.let(::WeakReference)
+            // A package's pill under the finger: it leaves the row on the touch down, so its swap
+            // out plays while the finger starts the pull (2026-11-17).
+            if (catcher != null && selectedIsland?.startsWith(LockIslands.PKG_KEY_PREFIX) == true) {
+                LockIslands.hidePkgPill()
+            }
             if (catcher != null && routed != null) {
                 if (catchDrag(catcher, ev)) {
                     routedTracker = VelocityTracker.obtain()
@@ -7386,6 +7391,9 @@ private class MiniPlayerController(
     }
 
     private var spread: Spread? = null
+    /** refresh runs since this list started opening, and when it did (perf, 2026-11-17). */
+    private var spreadRefreshCount = 0
+    private var spreadOpenedAt = 0L
 
     /** For `op mini`. */
     private fun describeSpread(): String = spread?.let { s ->
@@ -7449,6 +7457,8 @@ private class MiniPlayerController(
      * a card out, a switch, a flight - only the stack opens, as it did before (openStack).
      */
     private fun openSpread(why: String, finger: SpreadFinger? = null) { android.os.Trace.beginSection("MC openSpread"); try {
+        spreadRefreshCount = 0
+        spreadOpenedAt = android.os.SystemClock.uptimeMillis()
         if (spread != null) return
         val busy = morph != null || exchange != null || noteMorphKey != null || group != null ||
             flight != null
@@ -9209,6 +9219,12 @@ private class MiniPlayerController(
      * stack, out of sight while it takes them away; else the cards stay as they are.
      */
     private fun endSpread(folded: Boolean, why: String) {
+        if (spreadOpenedAt > 0L) {
+            android.util.Log.i("MCPerf", "list open " +
+                (android.os.SystemClock.uptimeMillis() - spreadOpenedAt) +
+                "ms refreshes=" + spreadRefreshCount + " why=" + why)
+            spreadOpenedAt = 0L
+        }
         val s = spread ?: return
         val media = s.media?.takeIf {
             folded && colorOs() && it.native.isAttachedToWindow &&
@@ -11483,6 +11499,7 @@ private class MiniPlayerController(
     }
 
     fun refresh() {
+        if (spread != null) spreadRefreshCount++
         if (Looper.myLooper() != Looper.getMainLooper()) { scheduleRefresh(); return }
         runCatching { refreshUnsafe() }.onFailure { Xp.w("MCMini: refresh failed: $it") }
     }
