@@ -75,7 +75,11 @@ object MiniPlayerRuntime {
         if (key.isNullOrEmpty()) p.edit().remove(PREF_EXPANDED).apply()
         else p.edit().putString(PREF_EXPANDED, key).apply()
         // Diagnostic only: which path is writing the memory (2026-11-17).
-        val from = runCatching { Throwable().stackTrace[1].methodName }.getOrDefault("?")
+        val from = runCatching {
+            Throwable().stackTrace.drop(1).take(5).joinToString(" < ") {
+                it.className.substringAfterLast('.') + "." + it.methodName + ":" + it.lineNumber
+            }
+        }.getOrDefault("?")
         Xp.log("MCMini: remembered expanded card = " + (key?.takeLast(12) ?: "none") + " from=" + from)
     }
 
