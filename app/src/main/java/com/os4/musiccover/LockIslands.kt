@@ -403,6 +403,8 @@ internal object LockIslands {
             Xp.log("MCNum: probe island " + (if (out) "out" else "in") + " state="
                 + NumState.state() + " why=" + why)
         }
+        // The list folded back: a package's pill is the row's again (2026-11-17).
+        if (!out) pkgHidden = false
         publish()
     }
 
