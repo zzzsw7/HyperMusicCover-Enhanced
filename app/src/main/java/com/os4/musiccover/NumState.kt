@@ -172,6 +172,7 @@ internal object NumState {
      * (2026-11-17, the user's rule).
      */
     private fun scheduleRemember(open: Boolean) {
+        lastChoiceAt = SystemClock.uptimeMillis()
         if (!open) {
             // Back to the default: written at once, and the wake then does nothing at all.
             writeMemory(false, force = true)
@@ -199,8 +200,15 @@ internal object NumState {
         val s = state()
         val open = when (s) {
             "LIST" -> true
-            "NUMBER", "STACK" -> false
-            else -> false
+            "NUMBER" -> false
+            // The pile on the way out is not a choice: leave the memory alone.
+            else -> null
+        }
+        // A gesture a moment ago is the user's latest word - the screen going off must not undo
+        // it (2026-11-17).
+        if (open == null || SystemClock.uptimeMillis() - lastChoiceAt < 3000L) {
+            Xp.log("MCNum: screen off -> " + s + " => left as is")
+            return
         }
         pendingOpen = null
         rememberGen++
@@ -231,6 +239,9 @@ internal object NumState {
         lastOpenedAt != 0L && SystemClock.uptimeMillis() - lastOpenedAt < 4000L
 
     @Volatile private var lastOpenedAt = 0L
+
+    /** When the user last changed the stack by hand. */
+    @Volatile private var lastChoiceAt = 0L
 
 
     /** The module's own list gesture has ended: folded home, or left open as the list. */
@@ -584,12 +595,12 @@ internal object NumState {
         if (busy()) { foldIfPiled(foldWhy); return@Runnable }
         Xp.log("MCNum: fold check why=" + foldWhy + " state=" + state()
             + " rememberedOpen=" + rememberedOpen() + " busy=" + busy())
-        if (state() == "STACK") {
-            // Only the pulled-out list needs doing: folded is the module's own default, so the
-            // wake leaves it alone and nothing has to be forced (2026-11-17, the user's rule).
-            if (rememberedOpen()) {
+        // Only the pulled-out list needs doing: folded is the module's own default, so the wake
+        // leaves it alone. Opened is put back whatever the lock screen came up in (2026-11-17).
+        if (rememberedOpen()) {
+            if (state() != "LIST") {
                 suppressRemembering()
-                goTo("LIST", anim = true, why = "remembered open ($foldWhy)")
+                goTo("LIST", anim = false, why = "remembered open ($foldWhy)")
             }
         }
     }
