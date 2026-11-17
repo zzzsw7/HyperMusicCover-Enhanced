@@ -1895,6 +1895,16 @@ object MiniPlayerRuntime {
         if (!out) rememberExpanded(null)
     }
 
+    /**
+     * The list opened from one package's pill: every other row is hidden, so the list shows only
+     * that package's notifications (2026-11-17).
+     */
+    @JvmStatic fun applyListFilter() {
+        val keep = LockIslands.filterMemberKeys() ?: return
+        val all = LockIslands.allMemberKeys()
+        live().forEach { c -> all.forEach { k -> runCatching { c.filterRow(k, k in keep) } } }
+    }
+
     @JvmStatic fun mediaCardRemoved() {
         resetDynamicChoice("media card dismissed")
         live().forEach { it.onMediaCardRemoved() }
