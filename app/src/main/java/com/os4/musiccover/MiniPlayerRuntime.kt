@@ -11068,6 +11068,11 @@ private class MiniPlayerController(
      * now points; a scene route needs the mini player to be the selected presentation.
      */
     fun beginTransition(toNative: Boolean, scene: Boolean): Boolean {
+        // The card put away while the lock screen is up, and not by our own restore: that is the
+        // user's collapse, whatever system path it took - the memory goes with it (2026-11-17).
+        if (!toNative && !restoringNow && Main.keyguardUp()) {
+            MiniPlayerRuntime.rememberExpanded(null)
+        }
         morph?.let { running ->
             running.aim(toNative)
             morphScene = scene
@@ -11652,6 +11657,9 @@ private class MiniPlayerController(
     private var restoreTries = 0
     private var restoreReleased = false
 
+    /** Set while a restore is putting a card back: its own transition is not a collapse. */
+    private var restoringNow = false
+
     /**
      * Restore runs ONCE per lock screen show, not on every refresh: with the memory kept for good,
      * a loop that re-expanded whenever nothing was out simply fought the user - the card bounced
@@ -11703,6 +11711,8 @@ private class MiniPlayerController(
             restoreTries = 0
             armedRestore = false
             Xp.log("MCMini: restoring the music card")
+            restoringNow = true
+            handler.postDelayed({ restoringNow = false }, 1500L)
             expandNote(MUSIC_ISLAND, remember = false)
             return
         }
@@ -11723,6 +11733,8 @@ private class MiniPlayerController(
         restoreReleased = false
         armedRestore = false
         Xp.log("MCMini: restoring the expanded card " + want.takeLast(12))
+        restoringNow = true
+        handler.postDelayed({ restoringNow = false }, 1500L)
         expandNote(want, remember = false)
     }
 
