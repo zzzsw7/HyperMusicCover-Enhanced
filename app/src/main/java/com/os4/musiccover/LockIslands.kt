@@ -336,7 +336,10 @@ internal object LockIslands {
     fun setSpread(on: Boolean) {
         if (spreading == on) return
         spreading = on
-        if (on) beginNotificationListArtwork()
+        if (on) {
+            beginNotificationListArtwork()
+            stackOpenedAt = android.os.SystemClock.uptimeMillis()
+        }
         NumState.trace("spread=$on")
         // Over: the island stands as the stack does. A pull let go before the stack ever left its
         // fold said nothing (no exitNumState), and the island taken out for it stayed out.
@@ -404,7 +407,20 @@ internal object LockIslands {
      * open. The islands put together again without a pipeline run - nothing in the stack changed.
      */
     private fun followStack(why: String) {
+        val now = android.os.SystemClock.uptimeMillis()
         val out = !stackFolded()
+        // On its way into the list the stack crosses NUMBER again a few ms after it was asked
+        // for it (traced 2026-11-17 19:48:35.170: 9ms in, 180ms before the next state). The
+        // stack island came back into the row for those frames, and the pill stood over the
+        // list opening under it - the "ghost" left of a package's pill going out. Held out
+        // till the fold that follows, or till the hold runs out: the list really folded back
+        // in the meantime is answered by the re-check, a moment later.
+        if (!out && stackOut && now - stackOpenedAt < STACK_OPEN_HOLD_MS) {
+            NumState.trace("$why: island stays out (asked ${now - stackOpenedAt}ms ago)")
+            main.postDelayed({ followStack("held ${now - stackOpenedAt}ms") },
+                STACK_OPEN_HOLD_MS - (now - stackOpenedAt) + 1L)
+            return
+        }
         if (out != stackOut) {
             stackOut = out
             NumState.trace("$why: island ${if (out) "out" else "in"}")
@@ -415,6 +431,11 @@ internal object LockIslands {
         if (!out) pkgHidden = false
         publish()
     }
+
+    /** When the stack was last asked for its list: what [followStack] holds the island out for. */
+    private var stackOpenedAt = 0L
+
+    private const val STACK_OPEN_HOLD_MS = 200L
 
     /** For `op mini`: what the filter has, and whether the stack is leaving it out. */
     fun describe(): String = "islands active=$active cover=$cover filter=${filter?.get() != null} " +
@@ -584,7 +605,10 @@ internal object LockIslands {
         Xp.log("MCPkg: stack open ($why) at ${android.os.SystemClock.uptimeMillis()}")
         // Not scrolled (no model to ask): the island stays, or nothing would be left to tap.
         // [scroll] false: a finger scrolls it (the spread pulled open) - only the island goes.
-        if (scroll) beginNotificationListArtwork()
+        if (scroll) {
+            beginNotificationListArtwork()
+            stackOpenedAt = android.os.SystemClock.uptimeMillis()
+        }
         if (scroll && !NumState.goTo("LIST", why = why).startsWith("scrollY")) {
             notificationArtworkNavigation.reset()
             updateNotificationArtwork()
