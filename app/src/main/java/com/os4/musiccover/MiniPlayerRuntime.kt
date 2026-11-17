@@ -9269,7 +9269,7 @@ private class MiniPlayerController(
      * straight into the row, the pill beside it never changing. The first version switched the
      * small island into the pill and opened it from there - two motions where one was asked for.
      */
-    fun expandNote(key: String) { android.os.Trace.beginSection("MC expandNote"); try {
+    fun expandNote(key: String, remember: Boolean = true) { android.os.Trace.beginSection("MC expandNote"); try {
         // Folded natively (LockIslands.nativeStack), the stack island opens as the stack's own
         // list, ColorOS's way: the island leaves the row and the rows come out of the fold where
         // they are. No flight: the rows were never out of the stack for one to land on.
@@ -9312,7 +9312,10 @@ private class MiniPlayerController(
         // Opened, the stack island leads with its newest notification, the one it shows.
         if (key == STACK_ISLAND) stackLeadKey = null
         noteMorphKey = key
-        MiniPlayerRuntime.rememberExpanded(key)
+        // Only the user's own open is the memory. A restore puts the card back out - it is not a
+        // new choice, and re-remembering it kept the card alive for ever, unable to be put away
+        // (2026-11-17).
+        if (remember) MiniPlayerRuntime.rememberExpanded(key)
         flightFromSmall = fromSmall
         flightHome = if (fromSmall) HOME_SMALL else HOME_PILL
         flightOut = false
@@ -11692,7 +11695,7 @@ private class MiniPlayerController(
             restoreTries = 0
             armedRestore = false
             Xp.log("MCMini: restoring the music card")
-            expandNote(MUSIC_ISLAND)
+            expandNote(MUSIC_ISLAND, remember = false)
             return
         }
         if (rowFor(want) == null) {
@@ -11712,7 +11715,7 @@ private class MiniPlayerController(
         restoreReleased = false
         armedRestore = false
         Xp.log("MCMini: restoring the expanded card " + want.takeLast(12))
-        expandNote(want)
+        expandNote(want, remember = false)
     }
 
     /** The session and track the music island is showing; a new one starts its artwork afresh. */
