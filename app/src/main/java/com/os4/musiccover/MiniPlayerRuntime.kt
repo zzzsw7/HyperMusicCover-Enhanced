@@ -74,7 +74,9 @@ object MiniPlayerRuntime {
         val p = prefs(ctx)
         if (key.isNullOrEmpty()) p.edit().remove(PREF_EXPANDED).apply()
         else p.edit().putString(PREF_EXPANDED, key).apply()
-        Xp.log("MCMini: remembered expanded card = " + (key?.takeLast(12) ?: "none"))
+        // Diagnostic only: which path is writing the memory (2026-11-17).
+        val from = runCatching { Throwable().stackTrace[1].methodName }.getOrDefault("?")
+        Xp.log("MCMini: remembered expanded card = " + (key?.takeLast(12) ?: "none") + " from=" + from)
     }
 
     /** The card the user last left expanded, or null when they collapsed everything. */
