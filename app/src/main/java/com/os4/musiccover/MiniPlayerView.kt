@@ -262,12 +262,7 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
     override fun onTouchEvent(event: MotionEvent): Boolean { android.os.Trace.beginSection("MC pillTouch"); try {
         if (!acceptsTouch()) return false
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                tracking = true
-                // The card is being put away by hand: the memory follows that gesture, not the
-                // automatic closes (unlock, cover exit) that share the same code (2026-11-17).
-                MiniPlayerRuntime.noteUserTouch()
-            }
+            MotionEvent.ACTION_DOWN -> tracking = true
             MotionEvent.ACTION_UP -> {
                 if (tracking) onOpenCover?.invoke()
                 tracking = false
