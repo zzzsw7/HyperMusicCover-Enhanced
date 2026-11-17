@@ -741,26 +741,26 @@ object MiniPlayerRuntime {
             Xp.findClass("com.miui.systemui.notification.MiuiBaseNotifUtil", classLoader)
                 .getDeclaredMethod("isBackgroundBlurOpened", Context::class.java).apply { isAccessible = true }
         }.getOrNull()
-        // Diagnostic only: who puts glass on a zero-sized view - that is the empty-rect blur drawn
-        // every frame, on the lock screen and in the AOD alike (2026-11-17).
+        // Glass for a view that is not there: MIUI puts a blur material on zero-sized, hidden
+        // notification rows while the stack rests folded (NUMBER), and each one then costs an
+        // empty-rect blur every frame - 130 a second measured, ~30% of systemui (2026-11-17).
         runCatching {
             val glassCls = Xp.findClass("com.miui.systemui.util.MiGlassCompat", classLoader)
-            val lastAt = java.util.HashMap<String, Long>()
+            val blocked = java.util.concurrent.atomic.AtomicLong()
             Xp.hookAll(glassCls, "setMiGlassCompat") { chain ->
                 val v = chain.args.firstOrNull() as? View
-                if (v != null && (v.width == 0 || v.height == 0)) {
-                    val now = android.os.SystemClock.uptimeMillis()
-                    val who = v.javaClass.name
-                    if (now - (lastAt[who] ?: 0L) > 2000L) {
-                        lastAt[who] = now
-                        Xp.log("MCPerf: glass on zero view " + who + " " + v.width + "x" + v.height
-                            + " vis=" + v.visibility + " attached=" + v.isAttachedToWindow
-                            + " parent=" + (v.parent as? View)?.javaClass?.name)
+                val hidden = v != null && (v.width == 0 || v.height == 0) &&
+                    (v.visibility != View.VISIBLE || !v.isAttachedToWindow)
+                if (hidden) {
+                    if (blocked.incrementAndGet() % 500L == 1L) {
+                        Xp.log("MCPerf: glass skipped for hidden " + v!!.javaClass.name)
                     }
+                    null
+                } else {
+                    chain.proceed()
                 }
-                chain.proceed()
             }
-        }.onFailure { Xp.log("MCPerf: glass hook failed: " + it) }
+        }.onFailure { Xp.log("MCPerf: glass filter failed: " + it) }
         val add = controller.getDeclaredMethod("addCallback", listener).apply { isAccessible = true }
         val ours = java.lang.reflect.Proxy.newProxyInstance(classLoader, arrayOf(listener)) { self, m, args ->
             when (m.name) {
