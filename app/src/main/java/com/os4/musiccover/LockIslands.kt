@@ -502,14 +502,7 @@ internal object LockIslands {
 
     /** A tapped island goes back into the stack, for the rest of this lock screen. */
     fun release(key: String) { android.os.Trace.beginSection("MC li.release"); try {
-        if (key.startsWith(PKG_KEY_PREFIX)) {
-            // Its own pill: the module's own list of that app's notifications.
-            PkgListOverlay.hide()
-            MiniPlayerRuntime.showPkgList(key.removePrefix(PKG_KEY_PREFIX))
-            return
-        }
-        if (key == STACK_KEY && nativeStack) {
-            PkgListOverlay.hide()
+        if ((key == STACK_KEY || key.startsWith(PKG_KEY_PREFIX)) && nativeStack) {
             openStack("released")
             return
         }
@@ -594,10 +587,6 @@ internal object LockIslands {
         released.toList() + if (stackOut && !nativeStack) listOf(STACK_KEY) else emptyList()
 
     /** A notification as last read, released or not: what a row collapsing back will show. */
-    /** The notes the islands hold for one package, newest first. */
-    fun pkgNotesFor(pkg: String): List<Note> =
-        (pkgMembers[pkg] ?: emptyList()).mapNotNull { lastRead[it] }
-
     fun noteFor(key: String): Note? = when {
         key == STACK_KEY -> stackNote
         key.startsWith(PKG_KEY_PREFIX) -> pkgNotes.firstOrNull { it.key == key }
@@ -1147,7 +1136,15 @@ internal object LockIslands {
         // with the stack opened its own way: the pill now grows back in from nothing, and the
         // count line showed through ("2 notifications") until it had (recording 2026-10-24).
         if (nativeStack) NumState.hideCount(spreading || active && stackNote != null)
-        val next = (focusShown + pkgNotes + listOfNotNull(stack)).sortedWith(bigFirst)
+        // A package's own island stays at the head of the row while it has notifications - the
+        // user asked for it to keep the top place unless they switch to another island - and it
+        // goes while the whole list is out, where its rows are the list's and a pill of its own
+        // underneath reads as a duplicate (2026-11-17).
+        val next = if (stackOut) {
+            (focusShown + listOfNotNull(stack)).sortedWith(bigFirst)
+        } else {
+            pkgNotes + (focusShown + listOfNotNull(stack)).sortedWith(bigFirst)
+        }
         // Unchanged is the same reading (read() hands back the cached note): by key and time, a
         // stopwatch paused or resumed - its `when` the same - never reached the island.
         if (next.size == notes.size && next.indices.all { next[it] === notes[it] }) return
