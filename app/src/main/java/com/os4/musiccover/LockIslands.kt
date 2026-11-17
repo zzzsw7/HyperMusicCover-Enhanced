@@ -502,7 +502,14 @@ internal object LockIslands {
 
     /** A tapped island goes back into the stack, for the rest of this lock screen. */
     fun release(key: String) { android.os.Trace.beginSection("MC li.release"); try {
-        if ((key == STACK_KEY || key.startsWith(PKG_KEY_PREFIX)) && nativeStack) {
+        if (key.startsWith(PKG_KEY_PREFIX)) {
+            // Its own pill: the module's own list of that app's notifications.
+            PkgListOverlay.hide()
+            MiniPlayerRuntime.showPkgList(key.removePrefix(PKG_KEY_PREFIX))
+            return
+        }
+        if (key == STACK_KEY && nativeStack) {
+            PkgListOverlay.hide()
             openStack("released")
             return
         }
@@ -587,6 +594,10 @@ internal object LockIslands {
         released.toList() + if (stackOut && !nativeStack) listOf(STACK_KEY) else emptyList()
 
     /** A notification as last read, released or not: what a row collapsing back will show. */
+    /** The notes the islands hold for one package, newest first. */
+    fun pkgNotesFor(pkg: String): List<Note> =
+        (pkgMembers[pkg] ?: emptyList()).mapNotNull { lastRead[it] }
+
     fun noteFor(key: String): Note? = when {
         key == STACK_KEY -> stackNote
         key.startsWith(PKG_KEY_PREFIX) -> pkgNotes.firstOrNull { it.key == key }

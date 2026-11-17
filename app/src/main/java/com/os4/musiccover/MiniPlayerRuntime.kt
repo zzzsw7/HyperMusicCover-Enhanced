@@ -1895,6 +1895,21 @@ object MiniPlayerRuntime {
         if (!out) rememberExpanded(null)
     }
 
+    /**
+     * One app's notifications, listed by the module itself: the pill of a package that stands on
+     * its own shows that app's notes alone, with no MIUI row involved (2026-11-17).
+     */
+    @JvmStatic fun showPkgList(pkg: String) {
+        val host = lastRoot?.get() as? ViewGroup ?: return
+        val notes = LockIslands.pkgNotesFor(pkg)
+        PkgListOverlay.show(host, notes)
+        Xp.log("MCMini: pkg list " + pkg + " rows=" + notes.size)
+    }
+
+    @JvmStatic fun hidePkgList() {
+        PkgListOverlay.hide()
+    }
+
     @JvmStatic fun mediaCardRemoved() {
         resetDynamicChoice("media card dismissed")
         live().forEach { it.onMediaCardRemoved() }
