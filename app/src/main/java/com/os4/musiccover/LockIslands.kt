@@ -509,9 +509,12 @@ internal object LockIslands {
     fun release(key: String) { android.os.Trace.beginSection("MC li.release"); try {
         if ((key == STACK_KEY || key.startsWith(PKG_KEY_PREFIX)) && nativeStack) {
             if (key.startsWith(PKG_KEY_PREFIX)) {
-                // The pill goes at the tap, not after the list has opened.
+                // The pill goes at the tap, and the list opens the way the stack's own pill
+                // opens it - the module's animation (2026-11-17).
                 pkgHidden = true
                 invalidate("package pill out")
+                MiniPlayerRuntime.openStackIsland()
+                return
             }
             openStack("released")
             return

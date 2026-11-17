@@ -1895,6 +1895,11 @@ object MiniPlayerRuntime {
         if (!out) rememberExpanded(null)
     }
 
+    /** Open the stack the way its own pill does - the module's animation, not a bare scroll. */
+    @JvmStatic fun openStackIsland() {
+        live().forEach { runCatching { it.expandNote(STACK_ISLAND) } }
+    }
+
     @JvmStatic fun mediaCardRemoved() {
         resetDynamicChoice("media card dismissed")
         live().forEach { it.onMediaCardRemoved() }
