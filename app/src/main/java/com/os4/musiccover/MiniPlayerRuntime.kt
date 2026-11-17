@@ -9269,7 +9269,7 @@ private class MiniPlayerController(
      * straight into the row, the pill beside it never changing. The first version switched the
      * small island into the pill and opened it from there - two motions where one was asked for.
      */
-    fun expandNote(key: String) { android.os.Trace.beginSection("MC expandNote"); try {
+    fun expandNote(key: String, remember: Boolean = true) { android.os.Trace.beginSection("MC expandNote"); try {
         // Folded natively (LockIslands.nativeStack), the stack island opens as the stack's own
         // list, ColorOS's way: the island leaves the row and the rows come out of the fold where
         // they are. No flight: the rows were never out of the stack for one to land on.
@@ -9312,7 +9312,9 @@ private class MiniPlayerController(
         // Opened, the stack island leads with its newest notification, the one it shows.
         if (key == STACK_ISLAND) stackLeadKey = null
         noteMorphKey = key
-        MiniPlayerRuntime.rememberExpanded(key)
+        // A restore puts the card back out; it is not the user choosing it again, so the memory
+        // stays exactly as it was (2026-11-17).
+        if (remember) MiniPlayerRuntime.rememberExpanded(key)
         flightFromSmall = fromSmall
         flightHome = if (fromSmall) HOME_SMALL else HOME_PILL
         flightOut = false
@@ -11626,6 +11628,9 @@ private class MiniPlayerController(
         // Started now, before a frame shows the new island at its rest width.
         if (updateFrom != null) startUpdate(updateContent, updateFrom)
         prewarmSpares()
+        val keyguardNow = Main.keyguardUp()
+        if (keyguardNow && !wasKeyguard) armedRestore = true
+        wasKeyguard = keyguardNow
         maybeRestoreExpanded()
     } finally { android.os.Trace.endSection() } }
 
@@ -11656,10 +11661,10 @@ private class MiniPlayerController(
     }
 
     private fun maybeRestoreExpanded() {
-        // Same rule as the notification group (2026-11-17): the key is written only when the user
-        // opens the card by hand and cleared when they put it away, so whenever it is there and
-        // nothing is out, the card goes back out. No "once per lock" - that was what let a lock
-        // screen come up folded with the memory still saying opened.
+        // Once per lock screen show, and never putting its own card back into the memory: an
+        // unbounded loop fought the user's collapse (the card could not be put away), and a
+        // restore that re-remembered its card kept the key alive for ever (2026-11-17).
+        if (!armedRestore) return
         val ctx = Main.sAppCtx ?: return
         val want = MiniPlayerRuntime.rememberedExpanded(ctx)
         if (want.isNullOrEmpty()) { armedRestore = false; return }
@@ -11692,7 +11697,7 @@ private class MiniPlayerController(
             restoreTries = 0
             armedRestore = false
             Xp.log("MCMini: restoring the music card")
-            expandNote(MUSIC_ISLAND)
+            expandNote(MUSIC_ISLAND, remember = false)
             return
         }
         if (rowFor(want) == null) {
@@ -11712,7 +11717,7 @@ private class MiniPlayerController(
         restoreReleased = false
         armedRestore = false
         Xp.log("MCMini: restoring the expanded card " + want.takeLast(12))
-        expandNote(want)
+        expandNote(want, remember = false)
     }
 
     /** The session and track the music island is showing; a new one starts its artwork afresh. */
