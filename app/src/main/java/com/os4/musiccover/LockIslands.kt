@@ -37,6 +37,9 @@ internal object LockIslands {
     private var pkgNotes: List<Note> = emptyList()
     private var pkgMembers: Map<String, List<String>> = emptyMap()
 
+    /** The package whose list is open, if any. */
+    @Volatile var listFilterPkg: String? = null
+
     /** One notification as an island. */
     class Note(
         val key: String,
