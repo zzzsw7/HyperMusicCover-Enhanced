@@ -31,6 +31,11 @@ internal object LockIslands {
     /** The one island every notification but the focus ones shares (stackMembers). */
     const val STACK_KEY = "mc:stack"
 
+    /** An island of its own per package (the one the user wants kept apart from the stack). */
+    const val PKG_KEY_PREFIX = "mc:pkg:"
+    private val SEPARATE_ISLANDS = setOf("com.tencent.mm")
+    private var pkgNotes: List<Note> = emptyList()
+
     /** One notification as an island. */
     class Note(
         val key: String,
@@ -496,7 +501,7 @@ internal object LockIslands {
 
     /** A tapped island goes back into the stack, for the rest of this lock screen. */
     fun release(key: String) { android.os.Trace.beginSection("MC li.release"); try {
-        if (key == STACK_KEY && nativeStack) {
+        if ((key == STACK_KEY || key.startsWith(PKG_KEY_PREFIX)) && nativeStack) {
             openStack("released")
             return
         }
@@ -581,7 +586,11 @@ internal object LockIslands {
         released.toList() + if (stackOut && !nativeStack) listOf(STACK_KEY) else emptyList()
 
     /** A notification as last read, released or not: what a row collapsing back will show. */
-    fun noteFor(key: String): Note? = if (key == STACK_KEY) stackNote else readCache[key]?.second
+    fun noteFor(key: String): Note? = when {
+        key == STACK_KEY -> stackNote
+        key.startsWith(PKG_KEY_PREFIX) -> pkgNotes.firstOrNull { it.key == key }
+        else -> readCache[key]?.second
+    }
 
     /**
      * The stack island's newest notification, when every notification in it is one app's and
@@ -597,7 +606,16 @@ internal object LockIslands {
     }
 
     /** [key]'s notifications: the stack island's, or itself. */
-    fun membersOf(key: String): List<String> = if (key == STACK_KEY) stackMembers else listOf(key)
+    fun membersOf(key: String): List<String> = when {
+        key == STACK_KEY -> stackMembers
+        key.startsWith(PKG_KEY_PREFIX) ->
+            pendingKeysOf(key.removePrefix(PKG_KEY_PREFIX)).ifEmpty { listOf(key) }
+        else -> listOf(key)
+    }
+
+    private fun pendingKeysOf(pkg: String): List<String> =
+        stackMembers.filter { false } + lastRead.values.filter { it.pkg == pkg && !it.focus }
+            .sortedWith(bigFirst).map { it.key }
 
     private fun invalidate(reason: String) {
         val f = filter?.get() ?: return
@@ -875,8 +893,13 @@ internal object LockIslands {
         val shown = all.filter { !(it.summary && it.group in grouped) }
         // Every notification but the focus ones in one island, the newest in front.
         val members = shown.filter { !it.focus }.sortedWith(bigFirst)
-        stackMembers = members.map { it.key }
-        stackNote = aggregate(members)
+        // The packages the user wants standing on their own leave the stack island: their own
+        // pill, their own note, newest first - the stack keeps the rest (2026-11-17).
+        val apart = members.filter { it.pkg in SEPARATE_ISLANDS }
+        val rest = members.filter { it.pkg !in SEPARATE_ISLANDS }
+        pkgNotes = apart.groupBy { it.pkg }.map { (pkg, list) -> aggregateGroup(pkg, list) }
+        stackMembers = rest.map { it.key }
+        stackNote = aggregate(rest)
         // Which notification fronts the stack island, each time that changes: after a fold the
         // capsule showed the older one for ~0.4 s before the newest (recording 2026-10-24).
         val front = members.firstOrNull()?.key
@@ -1115,7 +1138,7 @@ internal object LockIslands {
         // with the stack opened its own way: the pill now grows back in from nothing, and the
         // count line showed through ("2 notifications") until it had (recording 2026-10-24).
         if (nativeStack) NumState.hideCount(spreading || active && stackNote != null)
-        val next = (focusShown + listOfNotNull(stack)).sortedWith(bigFirst)
+        val next = (focusShown + pkgNotes + listOfNotNull(stack)).sortedWith(bigFirst)
         // Unchanged is the same reading (read() hands back the cached note): by key and time, a
         // stopwatch paused or resumed - its `when` the same - never reached the island.
         if (next.size == notes.size && next.indices.all { next[it] === notes[it] }) return
@@ -1167,6 +1190,15 @@ internal object LockIslands {
             summary = false, redacted = lead.redacted, since = members.maxOf { it.since },
             iconFrom = if (apps.size > 1) "apps${apps.size}" else lead.iconFrom,
             count = n)
+    }
+
+    /** One package's notifications as an island of their own: its newest one in front. */
+    private fun aggregateGroup(pkg: String, members: List<Note>): Note {
+        val lead = members.first()
+        return Note(PKG_KEY_PREFIX + pkg, pkg, lead.title, lead.text, lead.icon, focus = false,
+            time = lead.time, intent = lead.intent, group = null, summary = false,
+            redacted = lead.redacted, since = members.maxOf { it.since }, iconFrom = lead.iconFrom,
+            count = members.size)
     }
 
     private fun hiddenLine(lead: Note) = lead.redacted && android.text.TextUtils.equals(lead.text, hiddenText())
