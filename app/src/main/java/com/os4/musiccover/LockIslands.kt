@@ -37,6 +37,9 @@ internal object LockIslands {
     private var pkgNotes: List<Note> = emptyList()
     private var pkgMembers: Map<String, List<String>> = emptyMap()
 
+    /** The package's pill is out of the row from the tap until the list folds back. */
+    @Volatile private var pkgHidden = false
+
     /** One notification as an island. */
     class Note(
         val key: String,
@@ -503,6 +506,11 @@ internal object LockIslands {
     /** A tapped island goes back into the stack, for the rest of this lock screen. */
     fun release(key: String) { android.os.Trace.beginSection("MC li.release"); try {
         if ((key == STACK_KEY || key.startsWith(PKG_KEY_PREFIX)) && nativeStack) {
+            if (key.startsWith(PKG_KEY_PREFIX)) {
+                // The pill goes at the tap, not after the list has opened.
+                pkgHidden = true
+                invalidate("package pill out")
+            }
             openStack("released")
             return
         }
@@ -1140,7 +1148,7 @@ internal object LockIslands {
         // user asked for it to keep the top place unless they switch to another island - and it
         // goes while the whole list is out, where its rows are the list's and a pill of its own
         // underneath reads as a duplicate (2026-11-17).
-        val next = if (stackOut) {
+        val next = if (stackOut || pkgHidden) {
             (focusShown + listOfNotNull(stack)).sortedWith(bigFirst)
         } else {
             pkgNotes + (focusShown + listOfNotNull(stack)).sortedWith(bigFirst)
