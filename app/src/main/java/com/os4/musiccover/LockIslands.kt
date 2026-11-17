@@ -35,6 +35,7 @@ internal object LockIslands {
     const val PKG_KEY_PREFIX = "mc:pkg:"
     private val SEPARATE_ISLANDS = setOf("com.tencent.mm")
     private var pkgNotes: List<Note> = emptyList()
+    private var pkgMembers: Map<String, List<String>> = emptyMap()
 
     /** One notification as an island. */
     class Note(
@@ -609,13 +610,9 @@ internal object LockIslands {
     fun membersOf(key: String): List<String> = when {
         key == STACK_KEY -> stackMembers
         key.startsWith(PKG_KEY_PREFIX) ->
-            pendingKeysOf(key.removePrefix(PKG_KEY_PREFIX)).ifEmpty { listOf(key) }
+            pkgMembers[key.removePrefix(PKG_KEY_PREFIX)] ?: listOf(key)
         else -> listOf(key)
     }
-
-    private fun pendingKeysOf(pkg: String): List<String> =
-        stackMembers.filter { false } + lastRead.values.filter { it.pkg == pkg && !it.focus }
-            .sortedWith(bigFirst).map { it.key }
 
     private fun invalidate(reason: String) {
         val f = filter?.get() ?: return
@@ -897,6 +894,7 @@ internal object LockIslands {
         // pill, their own note, newest first - the stack keeps the rest (2026-11-17).
         val apart = members.filter { it.pkg in SEPARATE_ISLANDS }
         val rest = members.filter { it.pkg !in SEPARATE_ISLANDS }
+        pkgMembers = apart.groupBy { it.pkg }.mapValues { (_, list) -> list.map { it.key } }
         pkgNotes = apart.groupBy { it.pkg }.map { (pkg, list) -> aggregateGroup(pkg, list) }
         stackMembers = rest.map { it.key }
         stackNote = aggregate(rest)
