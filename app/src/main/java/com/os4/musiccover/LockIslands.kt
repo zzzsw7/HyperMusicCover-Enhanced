@@ -502,7 +502,12 @@ internal object LockIslands {
 
     /** A tapped island goes back into the stack, for the rest of this lock screen. */
     fun release(key: String) { android.os.Trace.beginSection("MC li.release"); try {
-        if ((key == STACK_KEY || key.startsWith(PKG_KEY_PREFIX)) && nativeStack) {
+        if (key.startsWith(PKG_KEY_PREFIX)) {
+            // Its own pill: the module's own list, filtered to that package.
+            MiniPlayerRuntime.openPackageSpread(key.removePrefix(PKG_KEY_PREFIX))
+            return
+        }
+        if (key == STACK_KEY && nativeStack) {
             openStack("released")
             return
         }
