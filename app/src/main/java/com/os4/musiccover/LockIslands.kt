@@ -40,6 +40,13 @@ internal object LockIslands {
     /** The package's pill is out of the row from the tap until the list folds back. */
     @Volatile private var pkgHidden = false
 
+    /** Out of the row at once: asked when a drag on it begins, before the morph. */
+    fun hidePkgPill() {
+        if (pkgHidden) return
+        pkgHidden = true
+        invalidate("package pill out")
+    }
+
     /** One notification as an island. */
     class Note(
         val key: String,
@@ -511,8 +518,7 @@ internal object LockIslands {
             if (key.startsWith(PKG_KEY_PREFIX)) {
                 // The pill goes at the tap, and the list opens the way the stack's own pill
                 // opens it - the module's animation (2026-11-17).
-                pkgHidden = true
-                invalidate("package pill out")
+                hidePkgPill()
                 MiniPlayerRuntime.openStackIsland()
                 return
             }
