@@ -1895,6 +1895,11 @@ object MiniPlayerRuntime {
         if (!out) rememberExpanded(null)
     }
 
+    /** Open the module's list showing one package's notifications alone (2026-11-17). */
+    @JvmStatic fun openPackageSpread(pkg: String) {
+        live().forEach { runCatching { it.openSpreadFor("pkg " + pkg, pkg) } }
+    }
+
     @JvmStatic fun mediaCardRemoved() {
         resetDynamicChoice("media card dismissed")
         live().forEach { it.onMediaCardRemoved() }
