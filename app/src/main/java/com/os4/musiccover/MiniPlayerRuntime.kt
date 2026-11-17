@@ -11641,6 +11641,11 @@ private class MiniPlayerController(
         if (keyguardNow && !wasKeyguard) armedRestore = true
         wasKeyguard = keyguardNow
         maybeRestoreExpanded()
+        // The card going away while the lock screen is up and it was not us putting it back:
+        // that is the user putting it away, so the memory goes with it (2026-11-17).
+        val outNow = expandedKey() != null
+        if (wasCardOut && !outNow && !restoringNow) MiniPlayerRuntime.rememberExpanded(null)
+        wasCardOut = outNow
     } finally { android.os.Trace.endSection() } }
 
     /**
@@ -11651,6 +11656,10 @@ private class MiniPlayerController(
      */
     private var restoreTries = 0
     private var restoreReleased = false
+
+    /** Whether a card was out last refresh, and whether a restore is putting one back now. */
+    private var wasCardOut = false
+    private var restoringNow = false
 
     /**
      * Restore runs ONCE per lock screen show, not on every refresh: with the memory kept for good,
@@ -11703,6 +11712,8 @@ private class MiniPlayerController(
             restoreTries = 0
             armedRestore = false
             Xp.log("MCMini: restoring the music card")
+            restoringNow = true
+            handler.postDelayed({ restoringNow = false }, 1200L)
             expandNote(MUSIC_ISLAND, remember = false)
             return
         }
@@ -11723,6 +11734,8 @@ private class MiniPlayerController(
         restoreReleased = false
         armedRestore = false
         Xp.log("MCMini: restoring the expanded card " + want.takeLast(12))
+        restoringNow = true
+        handler.postDelayed({ restoringNow = false }, 1200L)
         expandNote(want, remember = false)
     }
 
