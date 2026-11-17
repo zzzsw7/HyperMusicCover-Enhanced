@@ -1900,9 +1900,11 @@ object MiniPlayerRuntime {
      * that package's notifications (2026-11-17).
      */
     @JvmStatic fun applyListFilter() {
-        val keep = LockIslands.filterMemberKeys() ?: return
+        val keep = LockIslands.filterMemberKeys()
         val all = LockIslands.allMemberKeys()
-        live().forEach { c -> all.forEach { k -> runCatching { c.filterRow(k, k in keep) } } }
+        live().forEach { c ->
+            all.forEach { k -> runCatching { c.filterRow(k, keep == null || k in keep) } }
+        }
     }
 
     @JvmStatic fun mediaCardRemoved() {
@@ -9303,6 +9305,16 @@ private class MiniPlayerController(
      * small island into the pill and opened it from there - two motions where one was asked for.
      */
     fun expandNote(key: String) { android.os.Trace.beginSection("MC expandNote"); try {
+        // Every tap says what the list shows: the tapped package's rows, or the whole list. Set
+        // here, at the one entry every island tap goes through (2026-11-17).
+        val pkg = key.takeIf { it.startsWith(LockIslands.PKG_KEY_PREFIX) }
+            ?.removePrefix(LockIslands.PKG_KEY_PREFIX)
+        LockIslands.listFilterPkg = pkg
+        if (key == STACK_ISLAND || key.startsWith(LockIslands.PKG_KEY_PREFIX)) {
+            for (delay in longArrayOf(300L, 800L, 1500L)) {
+                handler.postDelayed({ MiniPlayerRuntime.applyListFilter() }, delay)
+            }
+        }
         // Folded natively (LockIslands.nativeStack), the stack island opens as the stack's own
         // list, ColorOS's way: the island leaves the row and the rows come out of the fold where
         // they are. No flight: the rows were never out of the stack for one to land on.
