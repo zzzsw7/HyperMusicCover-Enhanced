@@ -7476,7 +7476,12 @@ private class MiniPlayerController(
         endRow()
         resetIslandDrag()
         clearSmallNudge()
-        val big = selectedIsland
+        // A package's own pill standing in the big seat: the stack takes it for this list. The
+        // package pill is no card (see items below), so left in the seat no card would hold it and
+        // the morph went a different way from the stack pill's own (2026-11-17).
+        val chosen = selectedIsland
+        val big = if (chosen != null && chosen.startsWith(LockIslands.PKG_KEY_PREFIX)) STACK_ISLAND
+            else chosen
         val small = smallKey
         fun seatOf(key: String) = when (key) {
             big -> SEAT_BIG
@@ -7500,8 +7505,15 @@ private class MiniPlayerController(
         }
         // Pulled up from a notification island, the list can open without the media player in it.
         val noPlayer = big != MUSIC_ISLAND && config.optBoolean(MiniPlayerConfig.LIST_WITHOUT_PLAYER)
-        val items = islandKeys.filter { it != STACK_ISLAND && !(noPlayer && it == MUSIC_ISLAND) }
-            .map { SpreadItem(it, seatOf(it)) } +
+        // A package's own pill is no card of the list: its notifications are the stack's rows under
+        // their own keys, and it has no row for a card of its own to fly into. Opened as a card, its
+        // pill went a different way from the stack pill's - the two animations the user saw as
+        // unlike each other (2026-11-17). Left out, the pill is the list's from the first frame,
+        // exactly as the stack's pill is (items empty, the stack in the big seat).
+        val items = islandKeys.filter {
+            it != STACK_ISLAND && !it.startsWith(LockIslands.PKG_KEY_PREFIX) &&
+                !(noPlayer && it == MUSIC_ISLAND)
+        }.map { SpreadItem(it, seatOf(it)) } +
             out.map { SpreadItem(it, SEAT_HIDDEN, wasOut = true) }
         val s = Spread(items, if (STACK_ISLAND in islandKeys) seatOf(STACK_ISLAND) else SEAT_NONE)
         // Before the list moves the row: open, the capsule's rest rode up with the notifications,
@@ -9962,11 +9974,10 @@ private class MiniPlayerController(
         // A package's own pill is pulled open as it is tapped open: the list, with no row of its
         // own to fly into (2026-11-17).
         if (key.startsWith(LockIslands.PKG_KEY_PREFIX)) {
-            // The stack pill's pull, exactly: the finger opens the module's spread. The pill goes
-            // at the touch (pkgHidden) and is never left lifted under the finger - handed back to
-            // the spread, which carries the lift on. Only answered here, it stayed up in the air
-            // where the finger left it (the user, 2026-11-17).
-            LockIslands.hidePkgPill()
+            // The stack pill's pull, exactly: the finger opens the module's spread and the pill is
+            // handed to it, lift and all. Nothing is hidden here - the pill becomes the list, as
+            // the stack's pill does; hidden first, it was left lifted in the air where the finger
+            // let it go (the user, 2026-11-17).
             val finger = SpreadFinger(startY)
             if (colorOs()) player?.let { it.holdNudge(); finger.lift = -it.nudgeY } else player?.springNudgeBack(0f, 0f)
             springSmallNudgeBack(0f, 0f)
