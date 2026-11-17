@@ -69,6 +69,16 @@ object MiniPlayerRuntime {
     private const val PREF_EXPANDED = "expanded_key"
 
     /** 记下用户最后一次展开的卡片；null = 用户手动收起，之后不再自动展开。 */
+    /** When the user last touched the card: tells a hand-made close from an automatic one. */
+    @Volatile private var lastTouchAt = 0L
+
+    @JvmStatic fun noteUserTouch() {
+        lastTouchAt = SystemClock.uptimeMillis()
+    }
+
+    @JvmStatic fun touchedRecently(ms: Long = 2500L): Boolean =
+        lastTouchAt != 0L && SystemClock.uptimeMillis() - lastTouchAt < ms
+
     @JvmStatic fun rememberExpanded(key: String?) {
         val ctx = Main.sAppCtx ?: return
         val p = prefs(ctx)
@@ -11057,6 +11067,9 @@ private class MiniPlayerController(
      * now points; a scene route needs the mini player to be the selected presentation.
      */
     fun beginTransition(toNative: Boolean, scene: Boolean): Boolean {
+        // Put away by hand: the memory goes with it. An automatic close (unlock, the cover
+        // leaving) has no touch behind it and keeps the card remembered (2026-11-17).
+        if (!toNative && MiniPlayerRuntime.touchedRecently()) MiniPlayerRuntime.rememberExpanded(null)
         morph?.let { running ->
             running.aim(toNative)
             morphScene = scene
