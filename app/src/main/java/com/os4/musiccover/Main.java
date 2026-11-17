@@ -9603,6 +9603,9 @@ public class Main extends XposedModule {
                 }
                 Xp.log(TAG + "media card swiped down"
                         + (sCardSwipeShared ? ", shared with the notification fold" : ""));
+                // The hand-made collapse of the media card: the memory goes with it, so the next
+                // lock screen leaves it in the capsule (2026-11-17).
+                MiniPlayerRuntime.rememberExpanded(null);
                 return sCardSwipeShared ? SWIPE_NONE : SWIPE_FIRED;
             }
             case MotionEvent.ACTION_UP:
