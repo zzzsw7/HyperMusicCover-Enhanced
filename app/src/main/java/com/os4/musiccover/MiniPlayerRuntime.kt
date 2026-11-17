@@ -9293,6 +9293,7 @@ private class MiniPlayerController(
      * small island into the pill and opened it from there - two motions where one was asked for.
      */
     fun expandNote(key: String) { android.os.Trace.beginSection("MC expandNote"); try {
+        Xp.log("MCMini: expand " + key.takeLast(16))
         // Folded natively (LockIslands.nativeStack), the stack island opens as the stack's own
         // list, ColorOS's way: the island leaves the row and the rows come out of the fold where
         // they are. No flight: the rows were never out of the stack for one to land on.

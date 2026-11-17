@@ -502,6 +502,7 @@ internal object LockIslands {
 
     /** A tapped island goes back into the stack, for the rest of this lock screen. */
     fun release(key: String) { android.os.Trace.beginSection("MC li.release"); try {
+        Xp.log("MCIsland: release " + key.takeLast(16))
         if ((key == STACK_KEY || key.startsWith(PKG_KEY_PREFIX)) && nativeStack) {
             openStack("released")
             return
