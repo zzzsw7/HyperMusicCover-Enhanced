@@ -166,16 +166,19 @@ internal object NumState {
     private var rememberGen = 0
     private var pendingOpen: Boolean? = null
 
+    /**
+     * Only one state is worth keeping: the user pulled the list out. Folded is the module's
+     * default, so nothing has to be done for it - a "folded" memory just means "no action"
+     * (2026-11-17, the user's rule).
+     */
     private fun scheduleRemember(open: Boolean) {
-        // A gesture has just written the user's choice: its animation must not write over it.
-        if (SystemClock.uptimeMillis() < suppressUntil) return
-        // The pile (STACK) is the way through between the capsule and the list, and reports as
-        // "opened": taking it made a fold come back as opened a second later (2026-11-17).
-        if (state() == "STACK") return
-        pendingOpen = open
-        val gen = ++rememberGen
-        main.removeCallbacks(rememberRun)
-        main.postDelayed({ if (gen == rememberGen) rememberRun.run() }, 1200L)
+        if (!open) {
+            // Back to the default: written at once, and the wake then does nothing at all.
+            writeMemory(false, force = true)
+            return
+        }
+        if (state() != "LIST") return
+        writeMemory(true, force = true)
     }
 
     private val rememberRun = Runnable {
@@ -196,8 +199,8 @@ internal object NumState {
         val s = state()
         val open = when (s) {
             "LIST" -> true
-            "NUMBER" -> false
-            else -> pendingOpen ?: return
+            "NUMBER", "STACK" -> false
+            else -> false
         }
         pendingOpen = null
         rememberGen++
