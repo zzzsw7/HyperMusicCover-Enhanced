@@ -9316,6 +9316,8 @@ private class MiniPlayerController(
      * held the gesture for as long as its list took to come out (traced 2026-11-17).
      */
     fun expandStackDeferred(why: String) {
+        // One wait at a time: a pull and a tap on the same pill both ask for it.
+        if (deferredExpandPending && why == deferredExpandWhy) return
         if (spread != null) return
         val view = player
         if (view == null || view.visibility != View.VISIBLE || !Main.keyguardLocked()) {
@@ -9326,6 +9328,7 @@ private class MiniPlayerController(
             flight != null
         if (!busy) {
             deferredExpandTries = 0
+            deferredExpandPending = false
             expandNote(STACK_ISLAND)
             // Started: the island's own morph, which asks for the spread as it goes out. Out
             // already: it fell back to the stack's list, and waiting for another one is nothing.
@@ -9333,16 +9336,21 @@ private class MiniPlayerController(
         }
         if (++deferredExpandTries > DEFERRED_EXPAND_TRIES) {
             deferredExpandTries = 0
+            deferredExpandPending = false
             MiniPlayerRuntime.noteTouch("spread deferred ($why): still busy, the stack alone")
             LockIslands.openStack("$why: still busy")
             return
         }
-        MiniPlayerRuntime.noteTouch("spread deferred ($why): busy=${busy} try=$deferredExpandTries")
+        deferredExpandPending = true
+        deferredExpandWhy = why
+        MiniPlayerRuntime.noteTouch("spread deferred ($why): busy=$busy try=$deferredExpandTries")
         handler.postDelayed({ expandStackDeferred(why) }, DEFERRED_EXPAND_STEP_MS)
     }
 
     /** How long an expand waits for the motion in its way, and how often it looks. */
     private var deferredExpandTries = 0
+    private var deferredExpandPending = false
+    private var deferredExpandWhy = ""
 
     private val DEFERRED_EXPAND_TRIES = 16
     private val DEFERRED_EXPAND_STEP_MS = 40L
@@ -9358,6 +9366,14 @@ private class MiniPlayerController(
      * small island into the pill and opened it from there - two motions where one was asked for.
      */
     fun expandNote(key: String) { android.os.Trace.beginSection("MC expandNote"); try {
+        // A package's own pill has no row of its own in the stack to fly into: its tap opens the
+        // list, as the stack's pill does, instead of waiting ROW_WAIT_MS for a row that cannot be
+        // there and holding the gesture while it does (traced 2026-11-17: "not opened: no row",
+        // the list only after it).
+        if (key.startsWith(LockIslands.PKG_KEY_PREFIX)) {
+            LockIslands.release(key)
+            return
+        }
         // Folded natively (LockIslands.nativeStack), the stack island opens as the stack's own
         // list, ColorOS's way: the island leaves the row and the rows come out of the fold where
         // they are. No flight: the rows were never out of the stack for one to land on.
@@ -9938,6 +9954,12 @@ private class MiniPlayerController(
         // pull is taken (true) so nothing else runs under it, and the island springs back as it
         // goes.
         if (spread != null) return false
+        // A package's own pill is pulled open as it is tapped open: the list, with no row of its
+        // own to fly into (2026-11-17).
+        if (key.startsWith(LockIslands.PKG_KEY_PREFIX)) {
+            LockIslands.release(key)
+            return true
+        }
         if (key == STACK_ISLAND && LockIslands.foldsNatively()) {
             val finger = SpreadFinger(startY)
             // ColorOS: the capsule stays lifted where the finger has it and the morph carries that
