@@ -7576,6 +7576,11 @@ private class MiniPlayerController(
         for (item in s.items) {
             // A card out already is in the list as it is.
             if (item.key == MUSIC_ISLAND || item.wasOut) continue
+            // A package's own pill has no row of its own in the stack: its notifications are the
+            // stack's rows under their own keys. Waited for, it was never laid out, and the list
+            // waited the whole ROW_WAIT_MS for it before falling back to the stack's own scroll -
+            // the stall felt on both pills (traced 2026-11-17 20:19: 803ms, "spread" fallback).
+            if (item.key.startsWith(LockIslands.PKG_KEY_PREFIX)) continue
             coming++
             val row = rowFor(item.key)
             if (row == null || !row.isAttachedToWindow || !row.isLaidOut || row.width <= 0 || row.height <= 0) {
