@@ -5709,6 +5709,11 @@ private class MiniPlayerController(
     /** Whether this controller has a card out right now (for the memory at screen off). */
     fun cardIsOutNow(): Boolean = expandedKey() != null
 
+    /** The module's own list, filtered to one package. */
+    fun openSpreadFor(why: String, pkg: String) {
+        openSpread(why, filterPkg = pkg)
+    }
+
     fun onMediaCardRemoved() {
         exchange?.let { x ->
             if (x.expanded == MUSIC_ISLAND) x.expanded = null
