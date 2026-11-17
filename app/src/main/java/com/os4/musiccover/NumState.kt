@@ -585,19 +585,11 @@ internal object NumState {
         Xp.log("MCNum: fold check why=" + foldWhy + " state=" + state()
             + " rememberedOpen=" + rememberedOpen() + " busy=" + busy())
         if (state() == "STACK") {
-            // Folded home by the user is their choice and is remembered; the module's own folding
-            // (the row showing, notifications changing) is not, and leaves the memory alone.
-            when {
-                foldWhy == "spread folded" ->
-                    goTo("NUMBER", anim = true, why = "piled ($foldWhy)")
-                rememberedOpen() -> {
-                    suppressRemembering()
-                    goTo("LIST", anim = true, why = "remembered open ($foldWhy)")
-                }
-                else -> {
-                    suppressRemembering()
-                    goTo("NUMBER", anim = true, why = "piled ($foldWhy)")
-                }
+            // Only the pulled-out list needs doing: folded is the module's own default, so the
+            // wake leaves it alone and nothing has to be forced (2026-11-17, the user's rule).
+            if (rememberedOpen()) {
+                suppressRemembering()
+                goTo("LIST", anim = true, why = "remembered open ($foldWhy)")
             }
         }
     }
