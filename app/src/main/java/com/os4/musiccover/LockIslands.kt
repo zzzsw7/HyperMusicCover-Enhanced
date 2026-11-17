@@ -346,7 +346,7 @@ internal object LockIslands {
         NumState.trace("spread=$on")
         // Over: the island stands as the stack does. A pull let go before the stack ever left its
         // fold said nothing (no exitNumState), and the island taken out for it stayed out.
-        if (!on && nativeStack) stackOut = !stackFolded()
+        if (!on && nativeStack) stackOut = stackIsOut()
         publish()
         invalidate(if (on) "row spread out as the list" else "row folded back")
     }
@@ -410,20 +410,7 @@ internal object LockIslands {
      * open. The islands put together again without a pipeline run - nothing in the stack changed.
      */
     private fun followStack(why: String) {
-        val now = android.os.SystemClock.uptimeMillis()
-        val out = !stackFolded()
-        // The stack reports leaving NUMBER a frame or two before it does: on the way into the list
-        // (traced 2026-11-17 19:48:35.170, 9ms after the island went out) and between the shade's
-        // own states (19:55:17.918, 32ms, with the state still reading NUMBER). The stack island
-        // came back into the row for those frames and the pill stood over the list opening under
-        // it - the flicker left of a package's pill going out. Taken only once the island has been
-        // out a moment: a list really folded back is answered at once, and the re-check after the
-        // hold settles one that folds while it runs.
-        if (!out && stackOut && now - stackOutAt < STACK_OUT_HOLD_MS) {
-            NumState.trace("$why: island stays out (${now - stackOutAt}ms)")
-            main.postDelayed({ followStack("recheck ${now - stackOutAt}ms") }, STACK_OUT_HOLD_MS)
-            return
-        }
+        val out = stackIsOut()
         if (out != stackOut) {
             stackOut = out
             NumState.trace("$why: island ${if (out) "out" else "in"}")
@@ -435,7 +422,24 @@ internal object LockIslands {
         publish()
     }
 
-    /** When the island last went out of the row: what [followStack] holds a spurious fold for. */
+    /**
+     * Where the stack island stands: out while the stack is not folded, and still out through the
+     * NUMBER it reports on its way into the list (traced 2026-11-17 19:48:35.170, 9ms after the
+     * island went out, and 19:55:17.918, 32ms, with the state still reading NUMBER). Taken, the
+     * stack island came back into the row for those frames and the pill stood over the list
+     * opening under it. Held for [STACK_OUT_HOLD_MS] only, and asked again when it runs out: a
+     * list really folded back is answered at once.
+     */
+    private fun stackIsOut(): Boolean {
+        if (!stackFolded()) return true
+        val now = android.os.SystemClock.uptimeMillis()
+        if (!stackOut || now - stackOutAt >= STACK_OUT_HOLD_MS) return false
+        NumState.trace("island stays out (${now - stackOutAt}ms)")
+        main.postDelayed({ followStack("hold up") }, STACK_OUT_HOLD_MS)
+        return true
+    }
+
+    /** When the island last went out of the row: what [stackIsOut] holds a spurious fold for. */
     private var stackOutAt = 0L
 
     private const val STACK_OUT_HOLD_MS = 250L
@@ -954,8 +958,10 @@ internal object LockIslands {
         }
         focusShown = shown.filter { it.focus && it.key !in released }
         if (nativeStack) {
-            // The stack said nothing yet this lock screen: read where it is.
-            stackOut = !stackFolded()
+            // The stack said nothing yet this lock screen: read where it is (stackIsOut: the
+            // NUMBER it passes through on the way into the list is not a fold, and a pipeline run
+            // lands in the middle of that way too).
+            stackOut = stackIsOut()
             // Not the spread's own run (its focus rows coming in): the stack is on its way to
             // the list, and read as a pile on the way it was folded back (2026-09-30).
             if (active && !spreading && members.isNotEmpty()) NumState.foldIfPiled("notifications changed")
