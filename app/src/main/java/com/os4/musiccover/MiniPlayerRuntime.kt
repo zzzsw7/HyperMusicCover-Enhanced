@@ -11643,9 +11643,19 @@ private class MiniPlayerController(
         maybeRestoreExpanded()
         // The card going away while the lock screen is up and it was not us putting it back:
         // that is the user putting it away, so the memory goes with it (2026-11-17).
+        // A card that was out for a moment and gone again is an opening/flight, not a collapse:
+        // only one that stood out for a while and then left is the user putting it away.
         val outNow = expandedKey() != null
-        if (wasCardOut && !outNow && !restoringNow) MiniPlayerRuntime.rememberExpanded(null)
-        wasCardOut = outNow
+        val nowMs = android.os.SystemClock.uptimeMillis()
+        if (outNow) {
+            if (cardOutSince == 0L) cardOutSince = nowMs
+        } else {
+            val since = cardOutSince
+            cardOutSince = 0L
+            if (since != 0L && !restoringNow && nowMs - since > 1000L) {
+                MiniPlayerRuntime.rememberExpanded(null)
+            }
+        }
     } finally { android.os.Trace.endSection() } }
 
     /**
@@ -11657,8 +11667,8 @@ private class MiniPlayerController(
     private var restoreTries = 0
     private var restoreReleased = false
 
-    /** Whether a card was out last refresh, and whether a restore is putting one back now. */
-    private var wasCardOut = false
+    /** When the card came out, and whether a restore is putting one back now. */
+    private var cardOutSince = 0L
     private var restoringNow = false
 
     /**
