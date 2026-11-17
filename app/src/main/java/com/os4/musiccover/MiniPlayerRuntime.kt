@@ -73,11 +73,11 @@ object MiniPlayerRuntime {
     @Volatile private var lastTouchAt = 0L
 
     @JvmStatic fun noteUserTouch() {
-        lastTouchAt = SystemClock.uptimeMillis()
+        lastTouchAt = android.os.SystemClock.uptimeMillis()
     }
 
     @JvmStatic fun touchedRecently(ms: Long = 2500L): Boolean =
-        lastTouchAt != 0L && SystemClock.uptimeMillis() - lastTouchAt < ms
+        lastTouchAt != 0L && android.os.SystemClock.uptimeMillis() - lastTouchAt < ms
 
     @JvmStatic fun rememberExpanded(key: String?) {
         val ctx = Main.sAppCtx ?: return
