@@ -9233,7 +9233,7 @@ private class MiniPlayerController(
         // The user's own gesture has just ended: folded home or left as the list, that is the
         // state they are leaving the lock screen in (2026-11-16). Taken here, before the stack
         // animations that follow it.
-
+        NumState.noteSpreadEnd(folded)
         LockIslands.setSpread(false)
         // Folded home but the stack left at its pile (a let-go it read as the pile): folded too.
         if (folded) NumState.foldIfPiled("spread folded")

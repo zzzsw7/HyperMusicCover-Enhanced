@@ -74,7 +74,7 @@ internal object NumState {
                         Xp.log("MCNum: " + (if (value) "folded" else "opened")
                             + " (driving=" + driving.ifEmpty { "external" } + ")")
                         if (!value) lastOpenedAt = SystemClock.uptimeMillis()
-
+                        scheduleRemember(!value)
                         listeners.forEach { runCatching { it(value) } }
                     }
                     result
@@ -187,30 +187,6 @@ internal object NumState {
      * wait lost it. Flush what is pending, before the screen-off folds the stack itself
      * (2026-11-16).
      */
-    /**
-     * The screen going off: the capsule as it stands - the module's own island, folded or out as
-     * the list - is what the user leaves behind, and the one thing to keep. Taken here so a fold
-     * made a moment before locking is still kept, however the system's stack settles after it
-     * (2026-11-16).
-     */
-    fun rememberScreenOff() {
-        // The stack's own reading, not the island's cached one: "NUMBER" is the capsule the user
-        // folded into, "LIST" the rows pulled out. Anything else is the pile in between, which is
-        // not a state they can leave (2026-11-16).
-        val s = state()
-        // The module's capsule is the pile (STACK); its list is LIST. NUMBER is the system's own
-        // "N notifications" fold, which the islands do not use for the capsule (2026-11-16).
-        val open = when (s) {
-            "LIST" -> true
-            "STACK", "NUMBER" -> false
-            else -> null
-        }
-        Xp.log("MCNum: screen off -> " + s + " => " + (if (open == true) "opened" else if (open == false) "folded" else "not a state"))
-        if (open == null) return
-        suppressUntil = SystemClock.uptimeMillis() + 5000L
-        writeMemory(open, force = true)
-    }
-
     fun flushPending() {
         val open = pendingOpen ?: return
         rememberGen++
@@ -243,49 +219,6 @@ internal object NumState {
 
 
     /** The module's own list gesture has ended: folded home, or left open as the list. */
-    /**
-     * The module's own capsule state, as LockIslands follows it: the notification group folded
-     * into the bottom island (false) or out as the list (true). That is the state the user sees -
-     * the system's own pile in between is not - and it is the one to keep (2026-11-16).
-     */
-    /** When the screen came on: the settling after it is the module's, not the user's. */
-    @Volatile private var screenOnAt = 0L
-
-    fun noteScreenOn() {
-        screenOnAt = SystemClock.uptimeMillis()
-    }
-
-    /**
-     * The wake: the lock screen has come up folded, as it always does. Put it back the way the
-     * user left it, once - opened stays opened, folded stays folded. Asked a moment after the
-     * screen is on so the stack has something to scroll (2026-11-16).
-     */
-    fun applyRememberedOnWake() {
-        if (!folding) return
-        fun attempt(n: Int) {
-            if (n > 4) return
-            main.postDelayed({
-                val ready = runCatching { Main.screenOn() && Main.keyguardUp() }.getOrDefault(false)
-                if (!ready) { attempt(n + 1); return@postDelayed }
-                val open = rememberedOpen()
-                Xp.log("MCNum: wake -> " + (if (open) "opened" else "folded") + " (try " + n + ")")
-                goTo(if (open) "LIST" else "STACK", anim = false, why = "wake memory")
-            }, if (n == 0) 700L else 500L)
-        }
-        attempt(0)
-    }
-
-    fun rememberModuleState(open: Boolean) {
-        if (!Main.keyguardUp() || !Main.screenOn()) return
-        if (screenOnAt != 0L && SystemClock.uptimeMillis() - screenOnAt < 3000L) return
-        // The screen going off reports one more "out as the list" a moment later (the stack's own
-        // going-away), which would undo the fold just kept: that window is held shut (2026-11-16).
-        if (SystemClock.uptimeMillis() < suppressUntil) return
-        suppressUntil = SystemClock.uptimeMillis() + 1500L
-        Xp.log("MCNum: module state -> " + (if (open) "opened" else "folded"))
-        writeMemory(open, force = true)
-    }
-
     fun noteSpreadEnd(folded: Boolean) {
         if (!folding) return
         suppressUntil = SystemClock.uptimeMillis() + 2500L
