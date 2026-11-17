@@ -169,6 +169,9 @@ internal object NumState {
     private fun scheduleRemember(open: Boolean) {
         // A gesture has just written the user's choice: its animation must not write over it.
         if (SystemClock.uptimeMillis() < suppressUntil) return
+        // The pile (STACK) is the way through between the capsule and the list, and reports as
+        // "opened": taking it made a fold come back as opened a second later (2026-11-17).
+        if (state() == "STACK") return
         pendingOpen = open
         val gen = ++rememberGen
         main.removeCallbacks(rememberRun)
@@ -188,10 +191,19 @@ internal object NumState {
      * (2026-11-16).
      */
     fun flushPending() {
-        val open = pendingOpen ?: return
+        // Read what the stack shows as the screen goes: the pile it passes through is not a
+        // choice, so only the capsule and the list decide (2026-11-17).
+        val s = state()
+        val open = when (s) {
+            "LIST" -> true
+            "NUMBER" -> false
+            else -> pendingOpen ?: return
+        }
+        pendingOpen = null
         rememberGen++
         main.removeCallbacks(rememberRun)
-        writeMemory(open)
+        Xp.log("MCNum: screen off -> " + s + " => " + (if (open) "opened" else "folded"))
+        writeMemory(open, force = true)
     }
 
     /** Writes the memory (and puts the wake's default where the user left the stack). */
