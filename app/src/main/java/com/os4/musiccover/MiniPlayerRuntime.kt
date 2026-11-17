@@ -1898,7 +1898,7 @@ object MiniPlayerRuntime {
 
     /** Open the stack the way its own pill does - the module's animation, not a bare scroll. */
     @JvmStatic fun openStackIsland() {
-        live().forEach { runCatching { it.expandNote(STACK_ISLAND) } }
+        live().forEach { runCatching { it.expandStackDeferred("package pill") } }
     }
 
     @JvmStatic fun mediaCardRemoved() {
@@ -9307,6 +9307,45 @@ private class MiniPlayerController(
     private var rowWaitKey: String? = null
     private var rowWaitSince = 0L
     private var stackRef: WeakReference<View>? = null
+
+    /**
+     * The stack island opened as its own pill opens it: the module's spread, waited for while
+     * another motion still has the row (a card's morph, a switch, a flight). It used to take the
+     * stack's own list the moment one was running, so the same tap opened two different
+     * animations - the package's pill with the module's, the stack's with the ROM's, which also
+     * held the gesture for as long as its list took to come out (traced 2026-11-17).
+     */
+    fun expandStackDeferred(why: String) {
+        if (spread != null) return
+        val view = player
+        if (view == null || view.visibility != View.VISIBLE || !Main.keyguardLocked()) {
+            LockIslands.openStack("$why: no row")
+            return
+        }
+        val busy = morph != null || exchange != null || noteMorphKey != null || group != null ||
+            flight != null
+        if (!busy) {
+            deferredExpandTries = 0
+            expandNote(STACK_ISLAND)
+            // Started: the island's own morph, which asks for the spread as it goes out. Out
+            // already: it fell back to the stack's list, and waiting for another one is nothing.
+            if (noteMorphKey != null || spread != null || LockIslands.listOutNow()) return
+        }
+        if (++deferredExpandTries > DEFERRED_EXPAND_TRIES) {
+            deferredExpandTries = 0
+            MiniPlayerRuntime.noteTouch("spread deferred ($why): still busy, the stack alone")
+            LockIslands.openStack("$why: still busy")
+            return
+        }
+        MiniPlayerRuntime.noteTouch("spread deferred ($why): busy=${busy} try=$deferredExpandTries")
+        handler.postDelayed({ expandStackDeferred(why) }, DEFERRED_EXPAND_STEP_MS)
+    }
+
+    /** How long an expand waits for the motion in its way, and how often it looks. */
+    private var deferredExpandTries = 0
+
+    private val DEFERRED_EXPAND_TRIES = 16
+    private val DEFERRED_EXPAND_STEP_MS = 40L
 
     /**
      * A tap on a notification island opens it into its own row, as the music island opens into

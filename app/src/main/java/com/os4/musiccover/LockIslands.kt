@@ -346,7 +346,12 @@ internal object LockIslands {
         NumState.trace("spread=$on")
         // Over: the island stands as the stack does. A pull let go before the stack ever left its
         // fold said nothing (no exitNumState), and the island taken out for it stayed out.
-        if (!on && nativeStack) stackOut = stackIsOut()
+        if (!on && nativeStack) {
+            stackOut = stackIsOut()
+            // Over with the stack still folded: the row never went out, so a package's pill given
+            // up for it is the row's again - there would be no fold back to bring it (2026-11-17).
+            if (!stackOut) pkgHidden = false
+        }
         publish()
         invalidate(if (on) "row spread out as the list" else "row folded back")
     }
@@ -416,9 +421,11 @@ internal object LockIslands {
             NumState.trace("$why: island ${if (out) "out" else "in"}")
             Xp.log("MCNum: probe island " + (if (out) "out" else "in") + " state="
                 + NumState.state() + " why=" + why)
+            // The list folded back - and only then: a package's pill is the row's again
+            // (2026-11-17). Read as "not open" on every run, a pipeline run landing while the
+            // list was still going out put the pill back for those frames (traced 20:07).
+            if (!out) pkgHidden = false
         }
-        // The list folded back: a package's pill is the row's again (2026-11-17).
-        if (!out) pkgHidden = false
         publish()
     }
 
@@ -443,6 +450,9 @@ internal object LockIslands {
     private var stackOutAt = 0L
 
     private const val STACK_OUT_HOLD_MS = 250L
+
+    /** Whether the island is out of the row for the stack's list now: for a deferred expand. */
+    fun listOutNow(): Boolean = stackOut
 
     /** For `op mini`: what the filter has, and whether the stack is leaving it out. */
     fun describe(): String = "islands active=$active cover=$cover filter=${filter?.get() != null} " +
@@ -616,6 +626,10 @@ internal object LockIslands {
         if (scroll && !NumState.goTo("LIST", why = why).startsWith("scrollY")) {
             notificationArtworkNavigation.reset()
             updateNotificationArtwork()
+            // No list asked for: the row stays, so a package's pill given up for it comes back
+            // (nothing would fold back to bring it, 2026-11-17).
+            pkgHidden = false
+            publish()
             return
         }
         if (!stackOut) {
