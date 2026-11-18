@@ -2484,6 +2484,11 @@ public class Main extends XposedModule {
                         setResultData(LockHold.describe() + "\n" + ImmersiveHost.command(id, what));
                     } else if ("aodprobe".equals(op)) {
                         setResultData(aodProbe());
+                    } else if ("resprobe".equals(op)) {
+                        // Read only: who asks Resources for 0xffffffff (report 2026-11-18).
+                        boolean on = i.getBooleanExtra("on", true);
+                        ResProbe.setOn(on);
+                        setResultData("resource probe " + (on ? "on" : "off"));
                     } else if ("entries".equals(op)) {
                         setResultData(ClockCollapse.entries());
                     } else if ("poses".equals(op)) {
