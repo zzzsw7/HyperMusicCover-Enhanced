@@ -32,6 +32,18 @@ import org.json.JSONObject
 /** HyperChanger's compact card, hosted in SystemUI's shortcut area. */
 internal class MiniPlayerView(context: Context) : FrameLayout(context) {
     private var materialLayer = MaterialElement(context)
+
+    /**
+     * A real `NotificationBackgroundView` is hosted behind the content (2026-11-18): the pill's
+     * own material layer steps aside, so the rows' widget - and whatever dresses it, HyperLight
+     * included - is what shows.
+     */
+    private var rowBackdropOn = false
+
+    internal fun useRowBackdrop(use: Boolean) {
+        rowBackdropOn = use
+        materialLayer.alpha = if (use) 0f else 1f
+    }
     private val artwork = ImageView(context)
 
     /**
@@ -202,6 +214,7 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
                     shape = this@MiniPlayerView.outlineProvider
                 }
                 addView(materialLayer, 0, LayoutParams(-1, -1))
+                materialLayer.alpha = if (rowBackdropOn) 0f else 1f
             }
             lastMaterial = material
             materialAgain = {

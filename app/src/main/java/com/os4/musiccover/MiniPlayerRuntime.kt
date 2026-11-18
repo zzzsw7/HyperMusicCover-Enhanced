@@ -11797,6 +11797,28 @@ private class MiniPlayerController(
      * only draws once the pill's own material layer stops covering it.
      */
     private var rowBackdrop: View? = null
+    private var rowBackdropSize = ""
+
+    /** The hosted backdrop's own reading of the material, for the probe line. */
+    private fun sizeRowBackdrop(w: Int, h: Int) {
+        val v = rowBackdrop ?: return
+        if (w <= 0 || h <= 0) return
+        val size = w.toString() + "x" + h
+        if (size == rowBackdropSize) return
+        rowBackdropSize = size
+        runCatching {
+            v.javaClass.getMethod("setActualWidth", Int::class.javaPrimitiveType).invoke(v, w)
+            v.javaClass.getMethod("setActualHeight", Int::class.javaPrimitiveType).invoke(v, h)
+            v.javaClass.getMethod("setRadius", Float::class.javaPrimitiveType,
+                Float::class.javaPrimitiveType).invoke(v, h / 2f, h / 2f)
+            Xp.log("MCMini: row backdrop sized " + size +
+                " blur=" + runCatching { v.javaClass.getMethod("isBlurEnabled").invoke(v) }.getOrNull() +
+                " base=" + runCatching { v.javaClass.getMethod("getBaseBackgroundLayer").invoke(v) }
+                    .getOrNull()?.javaClass?.simpleName +
+                " stateful=" + runCatching { v.javaClass.getMethod("getStatefulBackgroundLayer").invoke(v) }
+                    .getOrNull()?.javaClass?.simpleName)
+        }
+    }
 
     private fun hostRowBackdrop(pill: View) {
         if (rowBackdrop != null) return
@@ -11825,6 +11847,10 @@ private class MiniPlayerController(
                 .invoke(v, host)
             Xp.log("MCMini: row backdrop hosted: " + v.javaClass.simpleName +
                 " children=" + (pill as ViewGroup).childCount)
+            (pill as? MiniPlayerView)?.useRowBackdrop(true)
+            v.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or, ob ->
+                if (r - l != or - ol || b - t != ob - ot) sizeRowBackdrop(r - l, b - t)
+            }
         }.onFailure { Xp.log("MCMini: row backdrop not attached: $it") }
         rowBackdrop = v
     }
