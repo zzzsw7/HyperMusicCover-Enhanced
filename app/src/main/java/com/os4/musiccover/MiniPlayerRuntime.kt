@@ -11495,6 +11495,19 @@ private class MiniPlayerController(
             // the pill shut till then: the pull went to swipe-to-unlock (filmed 2026-10-22).
             if (canShow() && !MiniPlayerScene.aodActive) view.setInteractionsEnabled(true)
         }
+        // A finger on the pill as the screen comes back: the row is still coming up (or waiting to
+        // be seen) and takes nothing yet - the touch went through to swipe-to-unlock and the pill
+        // stayed a circle's width behind it (traced 2026-11-18: the first touch, ~200ms after wake,
+        // "not taken: not interactive (canShow=true aod=false)"). A finger on it is one that can
+        // see it: finished here, the row takes it, and the frames of blurring the pill in are not
+        // spent on a gesture that has already begun.
+        if (appearing && appear.target == 1f && !view.acceptsTouch() && canShow() &&
+            !MiniPlayerScene.aodActive) {
+            endAppear()
+            backWaitSince = 0L
+            view.setInteractionsEnabled(true)
+            MiniPlayerRuntime.noteTouch("appear finished at the touch")
+        }
         val refused = when {
             view.visibility != View.VISIBLE -> "hidden"
             !view.isAttachedToWindow -> "detached"
@@ -11504,9 +11517,10 @@ private class MiniPlayerController(
             else -> null
         }
         if (refused != null) {
-            // The finger was meant for the pill and went to swipe-to-unlock: say why.
+            // The finger was meant for the pill and went to swipe-to-unlock: say why. Not in the
+            // touch log: it fired on every touch of a row that was not taking them yet, and it was
+            // read as a fault of the drag rather than what it is (2026-11-18).
             Xp.log("MCMini: down on the pill not taken: $refused")
-            MiniPlayerRuntime.noteTouch("refused: $refused")
             return null
         }
         return view
