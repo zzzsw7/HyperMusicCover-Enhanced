@@ -2270,6 +2270,36 @@ object MiniPlayerRuntime {
     /** The captured rows' calls, for the controller's backdrop handover. */
     internal fun rowCallsForBackdrop(): List<Pair<java.lang.reflect.Method, Array<Any?>>>? = rowCalls
 
+    /**
+     * The lock screen clock's blend colours, as the glass probe read them off the clock's own
+     * views (2026-11-18): `-56647777/107, -3477504/106, 1878916605/3`. The pill and the discs
+     * were dressed with the media card's (-8750470/100, ...), which is pinker; these are colder and
+     * whiter, which is the clock's. Applied over the recipe's, the same way the recipe applies its
+     * own - `MiBlurCompat.setMiBackgroundBlendColors(view, colours, 1.0)`.
+     */
+    private val clockBlend = intArrayOf(-56647777, 107, -3477504, 106, 1878916605, 3)
+    private var clockBlendMethod: java.lang.reflect.Method? = null
+    private var clockBlendLogged = false
+
+    private fun applyClockBlend(view: ImageView) {
+        val method = clockBlendMethod ?: runCatching {
+            Xp.findClass("com.miui.systemui.util.MiBlurCompat", view.context.classLoader)
+                .getMethod("setMiBackgroundBlendColors", View::class.java,
+                    IntArray::class.java, Float::class.javaPrimitiveType)
+                .apply { isAccessible = true }
+        }.getOrNull()?.also { clockBlendMethod = it } ?: return
+        runCatching { method.invoke(null, view, clockBlend, 1.0f) }.onFailure {
+            if (!clockBlendLogged) {
+                clockBlendLogged = true
+                Xp.w("MCMini: the clock's blend colours cannot be applied: " + it)
+            }
+        }
+        if (!clockBlendLogged) {
+            clockBlendLogged = true
+            Xp.log("MCMini: the clock's blend colours applied")
+        }
+    }
+
     internal fun material(view: ImageView, classLoader: ClassLoader) {
         if (configuredBackground(view)) return
         // Clear only our previous custom blur before replaying the native recipe.
@@ -2322,6 +2352,8 @@ object MiniPlayerRuntime {
             applyRowCalls(view)
             // ...and the lock screen clock's over both, when it has been seen dressing.
             applyClockCalls(view)
+            // The clock's colours, read off it by the glass probe, over everything above.
+            applyClockBlend(view)
             // Dressed in the AOD - a small island coming up there: dimmed as the rest are.
             aodDimArgs?.let { run { dimView(view, it) } }
         }.onFailure { error ->
