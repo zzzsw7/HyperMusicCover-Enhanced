@@ -2172,24 +2172,11 @@ object MiniPlayerRuntime {
         // The same calls on the hosted NotificationBackgroundView: unlike an ImageView it draws
         // the material itself, so this is the one target where a row's own calls can land. Shown
         // only once it reports a layer to draw - the pill's material stays until then (2026-11-18).
-        val backdrop = rowBackdrop ?: return
-        for ((method, args) in calls) {
-            val at = args.indexOfFirst { it is View }
-            if (at < 0) continue
-            val copy = args.copyOf()
-            copy[at] = backdrop
-            runCatching { method.invoke(null, *copy) }
-        }
-        if (rowBackdropShown) return
-        val base = runCatching {
-            backdrop.javaClass.getMethod("getBaseBackgroundLayer").invoke(backdrop)
-        }.getOrNull()
-        if (base != null) {
-            rowBackdropShown = true
-            (player as? MiniPlayerView)?.useRowBackdrop(true)
-            Xp.log("MCMini: row backdrop draws now: base=" + base.javaClass.simpleName)
-        }
+        live().firstOrNull()?.applyRowCallsToBackdrop()
     }
+
+    /** The captured rows' calls, for the controller's backdrop handover. */
+    internal fun rowCallsForBackdrop(): List<Pair<java.lang.reflect.Method, Array<Any?>>>? = rowCalls
 
     internal fun material(view: ImageView, classLoader: ClassLoader) {
         if (configuredBackground(view)) return
@@ -11819,6 +11806,32 @@ private class MiniPlayerController(
     private var rowBackdrop: View? = null
     private var rowBackdropSize = ""
     private var rowBackdropShown = false
+
+    /**
+     * The rows' material calls on the hosted `NotificationBackgroundView`, and the handover: the
+     * pill's own material layer stays until the backdrop reports a layer to draw, then steps
+     * aside (2026-11-18).
+     */
+    internal fun applyRowCallsToBackdrop() {
+        val backdrop = rowBackdrop ?: return
+        val calls = MiniPlayerRuntime.rowCallsForBackdrop() ?: return
+        for ((method, args) in calls) {
+            val at = args.indexOfFirst { it is View }
+            if (at < 0) continue
+            val copy = args.copyOf()
+            copy[at] = backdrop
+            runCatching { method.invoke(null, *copy) }
+        }
+        if (rowBackdropShown) return
+        val base = runCatching {
+            backdrop.javaClass.getMethod("getBaseBackgroundLayer").invoke(backdrop)
+        }.getOrNull()
+        if (base != null) {
+            rowBackdropShown = true
+            (player as? MiniPlayerView)?.useRowBackdrop(true)
+            Xp.log("MCMini: row backdrop draws now: base=" + base.javaClass.simpleName)
+        }
+    }
 
     /** The hosted backdrop's own reading of the material, for the probe line. */
     private fun sizeRowBackdrop(w: Int, h: Int) {
