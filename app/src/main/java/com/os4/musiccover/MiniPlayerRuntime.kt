@@ -11495,18 +11495,17 @@ private class MiniPlayerController(
             // the pill shut till then: the pull went to swipe-to-unlock (filmed 2026-10-22).
             if (canShow() && !MiniPlayerScene.aodActive) view.setInteractionsEnabled(true)
         }
-        // A finger on the pill as the screen comes back: the row is still coming up (or waiting to
-        // be seen) and takes nothing yet - the touch went through to swipe-to-unlock and the pill
-        // stayed a circle's width behind it (traced 2026-11-18: the first touch, ~200ms after wake,
-        // "not taken: not interactive (canShow=true aod=false)"). A finger on it is one that can
-        // see it: finished here, the row takes it, and the frames of blurring the pill in are not
-        // spent on a gesture that has already begun.
-        if (appearing && appear.target == 1f && !view.acceptsTouch() && canShow() &&
-            !MiniPlayerScene.aodActive) {
-            endAppear()
+        // A finger on the pill as the screen comes back: the row is still waiting to be seen, or
+        // still coming up, and takes nothing yet - the touch went through to swipe-to-unlock and
+        // the pill stayed a circle's width behind it (traced 2026-11-18: touches 400/800/1000ms
+        // after wake, "not taken: not interactive (canShow=true aod=false)"). A finger on it is
+        // one that can see it: settled here, the row takes it, and the frames of blurring the pill
+        // in are not spent on a gesture that has already begun.
+        if (!view.acceptsTouch() && canShow() && !MiniPlayerScene.aodActive) {
+            if (appearing && appear.target == 1f) endAppear()
             backWaitSince = 0L
             view.setInteractionsEnabled(true)
-            MiniPlayerRuntime.noteTouch("appear finished at the touch")
+            MiniPlayerRuntime.noteTouch("row takes the finger at wake")
         }
         val refused = when {
             view.visibility != View.VISIBLE -> "hidden"
