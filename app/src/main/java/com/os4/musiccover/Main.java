@@ -3601,6 +3601,9 @@ public class Main extends XposedModule {
                     restoreAwakeArtwork();
                     sAodGrey = Float.NaN;
                     applyGlassBrightness();
+                    // Three seconds of frames, logged by MCWake: for judging what drops them at
+                    // the wake - ours, the spatial wallpaper's, or SystemUI's own drawing (2026-11-18).
+                    MiniPlayerRuntime.beginWakeTrace("screen on");
                 } else if (Intent.ACTION_SCREEN_OFF.equals(a)) {
                     sScreenOn = false;
                     sAodGrey = Float.NaN;
