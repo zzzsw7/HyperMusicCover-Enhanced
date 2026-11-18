@@ -3674,8 +3674,6 @@ private class MiniPlayerController(
 
     private fun endGhosts() {
         ghostPill?.let {
-            if (it.visibility == View.VISIBLE) {
-            }
             it.endMorph()
             it.setContentBlur(0f)
             it.setContentAlpha(1f)
