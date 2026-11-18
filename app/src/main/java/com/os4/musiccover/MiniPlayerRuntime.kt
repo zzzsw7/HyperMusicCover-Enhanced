@@ -573,6 +573,29 @@ object MiniPlayerRuntime {
                                 }
                             }
                         }
+                        // What the LOCK SCREEN's own views - the big clock - are dressed with
+                        // (2026-11-18). Told by the WindowContext the keyguard system dresses them
+                        // through (rows get ContextImpl), and not a row's own background. These are
+                        // the values the user wants the pill to follow; the clock differs from the
+                        // rows in its blend colours, the 42-float glass array is the same.
+                        run {
+                            val throughWindow = chain.args.any { a ->
+                                a != null && a.javaClass.name == "android.window.WindowContext"
+                            }
+                            val target = chain.args.firstOrNull { it is View } as? View
+                            if (throughWindow && target != null &&
+                                !target.javaClass.name.endsWith("NotificationBackgroundView")) {
+                                val calls = clockCalls ?: ArrayList<Pair<java.lang.reflect.Method,
+                                    Array<Any?>>>().also { clockCalls = it }
+                                calls.removeAll { it.first == m }
+                                calls.add(m to chain.args.toTypedArray())
+                                if (!clockCallsLogged) {
+                                    clockCallsLogged = true
+                                    Xp.log("MCMini: the clock's material calls taken: " +
+                                        calls.joinToString(",") { it.first.name })
+                                }
+                            }
+                        }
                         if (list == null || bg == null || recordDepth > 0) return@intercept chain.proceed()
                         val args = chain.args.toTypedArray()
                         val at = args.indexOfFirst { it === bg }
@@ -2195,6 +2218,24 @@ object MiniPlayerRuntime {
     private const val GLASS_PROBE_MAX = 160
 
     /** The rows' material calls, as heavily dressed rows last took them (2026-11-18). */
+    private var clockCalls: MutableList<Pair<java.lang.reflect.Method, Array<Any?>>>? = null
+    private var clockCallsLogged = false
+
+    /**
+     * The lock screen clock's own material on one of ours: the calls the keyguard system dresses
+     * the clock through, with our view in its place - its blend colours over the recipe's, so the
+     * pill follows the clock rather than the media card (2026-11-18).
+     */
+    private fun applyClockCalls(view: ImageView) {
+        val calls = clockCalls ?: return
+        for ((method, args) in calls) {
+            val at = args.indexOfFirst { it is View }
+            if (at < 0) continue
+            val copy = args.copyOf()
+            copy[at] = view
+            runCatching { method.invoke(null, *copy) }
+        }
+    }
     private var rowCalls: MutableList<Pair<java.lang.reflect.Method, Array<Any?>>>? = null
     private var rowCallsLogged = false
     private var rowCallsFailed = false
@@ -2279,6 +2320,8 @@ object MiniPlayerRuntime {
             dressedViews.add(view)
             // The rows' own material over the card's recipe (2026-11-18).
             applyRowCalls(view)
+            // ...and the lock screen clock's over both, when it has been seen dressing.
+            applyClockCalls(view)
             // Dressed in the AOD - a small island coming up there: dimmed as the rest are.
             aodDimArgs?.let { run { dimView(view, it) } }
         }.onFailure { error ->
