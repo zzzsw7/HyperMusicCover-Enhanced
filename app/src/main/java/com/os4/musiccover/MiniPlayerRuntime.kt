@@ -11789,6 +11789,46 @@ private class MiniPlayerController(
         controller?.sessionToken?.let(MiniPlayerRuntime::selectMini)
     }
 
+    /**
+     * A real `NotificationBackgroundView` behind the pill (2026-11-18): the notification rows'
+     * own widget, so whatever dresses a row - the ROM's effects and any module that hooks them,
+     * HyperLight's tint and glass included - dresses the pill too, without copying parameters
+     * that cannot reproduce its `onDraw`. Added at the bottom of the pill's own children, so it
+     * only draws once the pill's own material layer stops covering it.
+     */
+    private var rowBackdrop: View? = null
+
+    private fun hostRowBackdrop(pill: View) {
+        if (rowBackdrop != null) return
+        val v = runCatching {
+            val cls = Xp.findClass("com.android.systemui.statusbar.notification.row." +
+                "NotificationBackgroundView", loader)
+            val ctor = cls.constructors.firstOrNull {
+                it.parameterTypes.isNotEmpty() && it.parameterTypes[0] == Context::class.java
+            } ?: error("no (Context, ...) constructor")
+            ctor.isAccessible = true
+            val args = Array(ctor.parameterTypes.size) { i ->
+                if (ctor.parameterTypes[i] == Context::class.java) context else null
+            }
+            ctor.newInstance(*args) as View
+        }.getOrElse { e ->
+            Xp.log("MCMini: row backdrop cannot be made: $e")
+            return
+        }
+        runCatching {
+            (pill as ViewGroup).addView(v, 0, FrameLayout.LayoutParams(-1, -1))
+            v.javaClass.getMethod("setBlurBackgroundEnabled", Boolean::class.javaPrimitiveType)
+                .invoke(v, true)
+            v.javaClass.getMethod("setOnKeyguard", Boolean::class.javaPrimitiveType)
+                .invoke(v, true)
+            v.javaClass.getMethod("chooseBackgroundBlurContainer", View::class.java)
+                .invoke(v, host)
+            Xp.log("MCMini: row backdrop hosted: " + v.javaClass.simpleName +
+                " children=" + (pill as ViewGroup).childCount)
+        }.onFailure { Xp.log("MCMini: row backdrop not attached: $it") }
+        rowBackdrop = v
+    }
+
     fun refresh() {
         if (spread != null) spreadRefreshCount++
         if (Looper.myLooper() != Looper.getMainLooper()) { scheduleRefresh(); return }
@@ -11939,6 +11979,7 @@ private class MiniPlayerController(
         val view = player ?: MiniPlayerView(context).also {
             player = it
             host.addView(it, lockScreenLayerIndex(), ViewGroup.LayoutParams(1, 1))
+            hostRowBackdrop(it)
         }
         if (music != null) trackMusic(music)
         // A notification let out and on its way home to the pill is not among the notes yet - nor
