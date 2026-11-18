@@ -2484,11 +2484,6 @@ public class Main extends XposedModule {
                         setResultData(LockHold.describe() + "\n" + ImmersiveHost.command(id, what));
                     } else if ("aodprobe".equals(op)) {
                         setResultData(aodProbe());
-                    } else if ("glassprobe".equals(op)) {
-                        // Read only: what the lock screen's clock is dressed with (2026-11-18).
-                        boolean on = i.getBooleanExtra("on", true);
-                        MiniPlayerRuntime.setGlassProbe(on);
-                        setResultData("glass probe " + (on ? "on" : "off"));
                     } else if ("entries".equals(op)) {
                         setResultData(ClockCollapse.entries());
                     } else if ("poses".equals(op)) {
@@ -3606,9 +3601,6 @@ public class Main extends XposedModule {
                     restoreAwakeArtwork();
                     sAodGrey = Float.NaN;
                     applyGlassBrightness();
-                    // Three seconds of frames, logged by MCWake: for judging what drops them at
-                    // the wake - ours, the spatial wallpaper's, or SystemUI's own drawing (2026-11-18).
-                    MiniPlayerRuntime.beginWakeTrace("screen on");
                 } else if (Intent.ACTION_SCREEN_OFF.equals(a)) {
                     sScreenOn = false;
                     sAodGrey = Float.NaN;

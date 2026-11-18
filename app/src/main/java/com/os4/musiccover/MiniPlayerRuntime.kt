@@ -518,84 +518,6 @@ object MiniPlayerRuntime {
                     Xp.api().hook(m).intercept { chain ->
                         val list = recording
                         val bg = recordTarget
-                        // Read-only probe (`op glassprobe`): what the lock screen's big clock is
-                        // dressed with. Its glass comes from these static calls, so the parameters
-                        // are readable here - unlike a notification row's, which is drawn in its
-                        // own onDraw (2026-11-18).
-                        if (glassProbe && glassProbeLeft > 0) {
-                            val target = chain.args.firstOrNull { it is View } as? View
-                            if (target != null) {
-                                val idName = runCatching {
-                                    if (target.id != View.NO_ID)
-                                        target.resources.getResourceEntryName(target.id) else "-"
-                                }.getOrDefault("-")
-                                val parent = (target.parent as? View)?.javaClass?.simpleName ?: "-"
-                                val key = target.javaClass.simpleName + "#" + idName + "<" + parent +
-                                    "/" + m.name
-                                val text = chain.args.joinToString(",") { arg ->
-                                    when (arg) {
-                                        is IntArray -> arg.joinToString("/")
-                                        is FloatArray -> arg.take(8).joinToString("/") { "%.2f".format(it) } +
-                                            if (arg.size > 8) ".." + arg.size else ""
-                                        is View -> arg.javaClass.simpleName
-                                        else -> arg?.toString() ?: "null"
-                                    }
-                                }
-                                if (glassSeen.add(key + "|" + text) && glassProbeLeft > 0) {
-                                    glassProbeLeft--
-                                    Xp.log("MCGlass: " + key + " args=" + text)
-                                }
-                            }
-                        }
-                        // What a NOTIFICATION ROW is dressed with (2026-11-18): the same static
-                        // calls, on the row's own background view. Recorded off the rows rather
-                        // than the media card, because another module (HyperLight) dresses both -
-                        // these are the values as it left them, which the stock getters never
-                        // show. Replayed on the pill and the discs by applyRowCalls.
-                        val first = chain.args.firstOrNull()
-                        if (first is View &&
-                            first.javaClass.name.endsWith("NotificationBackgroundView")) {
-                            val wanted = when {
-                                m.name.startsWith("setMiBackgroundBlendColors") ->
-                                    chain.args.any { it is IntArray }
-                                m.name == "setMiGlassCompat" -> chain.args.any { it is FloatArray }
-                                else -> false
-                            }
-                            if (wanted) {
-                                val calls = rowCalls ?: ArrayList<Pair<java.lang.reflect.Method,
-                                    Array<Any?>>>().also { rowCalls = it }
-                                calls.removeAll { it.first == m }
-                                calls.add(m to chain.args.toTypedArray())
-                                if (!rowCallsLogged) {
-                                    rowCallsLogged = true
-                                    Xp.log("MCMini: the rows' material calls taken: " +
-                                        calls.joinToString(",") { it.first.name })
-                                }
-                            }
-                        }
-                        // What the LOCK SCREEN's own views - the big clock - are dressed with
-                        // (2026-11-18). Told by the WindowContext the keyguard system dresses them
-                        // through (rows get ContextImpl), and not a row's own background. These are
-                        // the values the user wants the pill to follow; the clock differs from the
-                        // rows in its blend colours, the 42-float glass array is the same.
-                        run {
-                            val throughWindow = chain.args.any { a ->
-                                a != null && a.javaClass.name == "android.window.WindowContext"
-                            }
-                            val target = chain.args.firstOrNull { it is View } as? View
-                            if (throughWindow && target != null &&
-                                !target.javaClass.name.endsWith("NotificationBackgroundView")) {
-                                val calls = clockCalls ?: ArrayList<Pair<java.lang.reflect.Method,
-                                    Array<Any?>>>().also { clockCalls = it }
-                                calls.removeAll { it.first == m }
-                                calls.add(m to chain.args.toTypedArray())
-                                if (!clockCallsLogged) {
-                                    clockCallsLogged = true
-                                    Xp.log("MCMini: the clock's material calls taken: " +
-                                        calls.joinToString(",") { it.first.name })
-                                }
-                            }
-                        }
                         if (list == null || bg == null || recordDepth > 0) return@intercept chain.proceed()
                         val args = chain.args.toTypedArray()
                         val at = args.indexOfFirst { it === bg }
@@ -1673,116 +1595,6 @@ object MiniPlayerRuntime {
     @JvmStatic fun rowTree(match: String): String =
         live().firstOrNull()?.rowTree(match) ?: "no controller"
 
-    // ---- the wake's frame trace (diagnostic, on demand)
-
-    /**
-     * Three seconds of frames from the moment the screen comes on, logged by `MCWake:` in logcat:
-     * each frame slower than [WAKE_SLOW_MS] with
-     *
-     *  - `dt`: the frame's own interval, from vsync to vsync,
-     *  - `cpu`: how much CPU THE MAIN THREAD burned between the two vsyncs (everything in it -
-     *    SystemUI's own drawing, the spatial wallpaper's callbacks, ours),
-     *  - `own`: how many of this module's own Choreographer callbacks ran (appear, switch, row,
-     *    spread) - 0 means the slow frame was not ours to draw,
-     *  - what the row had running (`busy=`) and where the stack was (`st=`).
-     *
-     * Turned on by the screen coming on, and costing nothing outside its three seconds: one
-     * FrameCallback posting itself while it lasts. `MCMini: wake trace done` at the end carries
-     * frames / slow / worst / the worst frame's CPU.
-     */
-    @JvmStatic fun beginWakeTrace(why: String) {
-        if (wakeTracing) return
-        wakeTracing = true
-        wakeTraceEnd = android.os.SystemClock.uptimeMillis() + WAKE_TRACE_MS
-        wakeTraceLastVsync = 0L
-        wakeTraceLastCpu = android.os.Debug.threadCpuTimeNanos()
-        wakeTraceLastOwnCpuNs = hmcCpuNs
-        wakeTraceLastTicks = hmcFrameTicks
-        wakeTraceFrames = 0
-        wakeTraceSlow = 0
-        wakeTraceWorst = 0f
-        wakeTraceWorstCpu = 0f
-        synchronized(wakeTraceLines) { wakeTraceLines.clear() }
-        Xp.log("MCWake: start ($why)")
-        Choreographer.getInstance().removeFrameCallback(wakeTraceFrame)
-        Choreographer.getInstance().postFrameCallback(wakeTraceFrame)
-    }
-
-    private var wakeTracing = false
-    private var wakeTraceEnd = 0L
-    private var wakeTraceLastVsync = 0L
-    private var wakeTraceLastCpu = 0L
-    private var wakeTraceLastTicks = 0
-    private var wakeTraceLastOwnCpuNs = 0L
-    private var wakeTraceFrames = 0
-    private var wakeTraceSlow = 0
-    private var wakeTraceWorst = 0f
-    private var wakeTraceWorstCpu = 0f
-    private val wakeTraceLines = ArrayDeque<String>()
-
-    private const val WAKE_TRACE_MS = 3000L
-    private const val WAKE_SLOW_MS = 20f
-    private const val WAKE_TRACE_KEEP = 24
-
-    /** Frames this module's own animation callbacks ran on, counted for the wake trace. */
-    internal var hmcFrameTicks = 0
-
-    /** CPU spent inside this module's own work between two frames, for the wake trace. */
-    internal var hmcCpuNs = 0L
-
-    internal fun noteCpu(ns: Long) {
-        if (ns > 0L) hmcCpuNs += ns
-    }
-
-    private val wakeTraceFrame = object : Choreographer.FrameCallback {
-        override fun doFrame(frameTimeNanos: Long) {
-            if (!wakeTracing) return
-            val now = android.os.SystemClock.uptimeMillis()
-            val cpuNow = android.os.Debug.threadCpuTimeNanos()
-            val ticks = hmcFrameTicks
-            val ownCpuNs = hmcCpuNs
-            if (wakeTraceLastVsync != 0L) {
-                val dt = (frameTimeNanos - wakeTraceLastVsync) / 1e6f
-                val cpu = (cpuNow - wakeTraceLastCpu) / 1e6f
-                val ours = (ownCpuNs - wakeTraceLastOwnCpuNs) / 1e6f
-                wakeTraceFrames++
-                if (dt > WAKE_SLOW_MS) {
-                    wakeTraceSlow++
-                    if (dt > wakeTraceWorst) {
-                        wakeTraceWorst = dt
-                        wakeTraceWorstCpu = cpu
-                    }
-                    val state = live().firstOrNull()?.wakeState() ?: "no row"
-                    val line = "MCWake: slow dt=" + "%.1f".format(dt) +
-                        " cpu=" + "%.1f".format(cpu) +
-                        " ours=" + "%.1f".format(ours) +
-                        " own=" + (ticks - wakeTraceLastTicks) +
-                        " st=" + NumState.state() + " " + state
-                    synchronized(wakeTraceLines) {
-                        wakeTraceLines.addLast(line)
-                        while (wakeTraceLines.size > WAKE_TRACE_KEEP) wakeTraceLines.removeFirst()
-                    }
-                }
-            }
-            wakeTraceLastVsync = frameTimeNanos
-            wakeTraceLastCpu = cpuNow
-            wakeTraceLastOwnCpuNs = ownCpuNs
-            wakeTraceLastTicks = ticks
-            if (now < wakeTraceEnd) {
-                Choreographer.getInstance().postFrameCallback(this)
-            } else {
-                wakeTracing = false
-                synchronized(wakeTraceLines) {
-                    wakeTraceLines.forEach { Xp.log(it) }
-                    wakeTraceLines.clear()
-                }
-                Xp.log("MCMini: wake trace done frames=" + wakeTraceFrames + " slow=" + wakeTraceSlow +
-                    " worst=" + "%.1f".format(wakeTraceWorst) + "ms cpu=" +
-                    "%.1f".format(wakeTraceWorstCpu) + "ms")
-            }
-        }
-    }
-
     /** The row spread out as the list is being pulled home (NumState's hands-up folds it). */
     @JvmStatic fun spreadFolding(): Boolean = live().any { it.spreadFolding() }
 
@@ -2195,111 +2007,6 @@ object MiniPlayerRuntime {
         false
     }
 
-    // ---- the lock screen clock's glass, read-only probe
-
-    /**
-     * `op glassprobe --ez on true`: every material call the clock is dressed with, logged as
-     * `MCGlass:` - the target's class, the method and its arguments. Read only: nothing is
-     * applied from it, and it stops by itself after [GLASS_PROBE_MAX] lines or with `on false`.
-     */
-    @Volatile private var glassProbe = false
-    @Volatile private var glassProbeLeft = 0
-    private val glassSeen = HashSet<String>()
-
-    @JvmStatic fun setGlassProbe(on: Boolean) {
-        glassProbe = on
-        if (on) {
-            synchronized(glassSeen) { glassSeen.clear() }
-            glassProbeLeft = GLASS_PROBE_MAX
-        }
-        Xp.log("MCGlass: probe " + (if (on) "on, up to " + GLASS_PROBE_MAX + " lines" else "off"))
-    }
-
-    private const val GLASS_PROBE_MAX = 160
-
-    /** The rows' material calls, as heavily dressed rows last took them (2026-11-18). */
-    private var clockCalls: MutableList<Pair<java.lang.reflect.Method, Array<Any?>>>? = null
-    private var clockCallsLogged = false
-
-    /**
-     * The lock screen clock's own material on one of ours: the calls the keyguard system dresses
-     * the clock through, with our view in its place - its blend colours over the recipe's, so the
-     * pill follows the clock rather than the media card (2026-11-18).
-     */
-    private fun applyClockCalls(view: ImageView) {
-        val calls = clockCalls ?: return
-        for ((method, args) in calls) {
-            val at = args.indexOfFirst { it is View }
-            if (at < 0) continue
-            val copy = args.copyOf()
-            copy[at] = view
-            runCatching { method.invoke(null, *copy) }
-        }
-    }
-    private var rowCalls: MutableList<Pair<java.lang.reflect.Method, Array<Any?>>>? = null
-    private var rowCallsLogged = false
-    private var rowCallsFailed = false
-
-    /**
-     * The notification rows' own material on one of ours: the same calls a row takes from
-     * `MiBlurCompat` / `MiGlassCompat`, with our view in the row's place. The module's own pill
-     * and discs were dressed from the MEDIA CARD's recipe, and a card's material is not a row's -
-     * with another module (HyperLight) dressing both, only the rows' own calls carry the final
-     * values (its parameter set is not readable from the stock getters).
-     */
-    private fun applyRowCalls(view: ImageView) {
-        val calls = rowCalls ?: return
-        for ((method, args) in calls) {
-            val at = args.indexOfFirst { it is View }
-            if (at < 0) continue
-            val copy = args.copyOf()
-            copy[at] = view
-            runCatching { method.invoke(null, *copy) }.onFailure {
-                if (!rowCallsFailed) {
-                    rowCallsFailed = true
-                    Xp.w("MCMini: the rows' " + method.name + " cannot be applied: " + it)
-                }
-            }
-        }
-        // The same calls on the hosted NotificationBackgroundView: unlike an ImageView it draws
-        // the material itself, so this is the one target where a row's own calls can land. Shown
-        // only once it reports a layer to draw - the pill's material stays until then (2026-11-18).
-        live().firstOrNull()?.applyRowCallsToBackdrop()
-    }
-
-    /** The captured rows' calls, for the controller's backdrop handover. */
-    internal fun rowCallsForBackdrop(): List<Pair<java.lang.reflect.Method, Array<Any?>>>? = rowCalls
-
-    /**
-     * The lock screen clock's blend colours, as the glass probe read them off the clock's own
-     * views (2026-11-18): `-56647777/107, -3477504/106, 1878916605/3`. The pill and the discs
-     * were dressed with the media card's (-8750470/100, ...), which is pinker; these are colder and
-     * whiter, which is the clock's. Applied over the recipe's, the same way the recipe applies its
-     * own - `MiBlurCompat.setMiBackgroundBlendColors(view, colours, 1.0)`.
-     */
-    private val clockBlend = intArrayOf(-56647777, 107, -3477504, 106, 1878916605, 3)
-    private var clockBlendMethod: java.lang.reflect.Method? = null
-    private var clockBlendLogged = false
-
-    private fun applyClockBlend(view: ImageView) {
-        val method = clockBlendMethod ?: runCatching {
-            Xp.findClass("com.miui.systemui.util.MiBlurCompat", view.context.classLoader)
-                .getMethod("setMiBackgroundBlendColors", View::class.java,
-                    IntArray::class.java, Float::class.javaPrimitiveType)
-                .apply { isAccessible = true }
-        }.getOrNull()?.also { clockBlendMethod = it } ?: return
-        runCatching { method.invoke(null, view, clockBlend, 1.0f) }.onFailure {
-            if (!clockBlendLogged) {
-                clockBlendLogged = true
-                Xp.w("MCMini: the clock's blend colours cannot be applied: " + it)
-            }
-        }
-        if (!clockBlendLogged) {
-            clockBlendLogged = true
-            Xp.log("MCMini: the clock's blend colours applied")
-        }
-    }
-
     internal fun material(view: ImageView, classLoader: ClassLoader) {
         if (configuredBackground(view)) return
         // Clear only our previous custom blur before replaying the native recipe.
@@ -2348,12 +2055,6 @@ object MiniPlayerRuntime {
                 }
             }
             dressedViews.add(view)
-            // The rows' own material over the card's recipe (2026-11-18).
-            applyRowCalls(view)
-            // ...and the lock screen clock's over both, when it has been seen dressing.
-            applyClockCalls(view)
-            // The clock's colours, read off it by the glass probe, over everything above.
-            applyClockBlend(view)
             // Dressed in the AOD - a small island coming up there: dimmed as the rest are.
             aodDimArgs?.let { run { dimView(view, it) } }
         }.onFailure { error ->
@@ -3352,7 +3053,6 @@ private class MiniPlayerController(
 
     private val swapFrame = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) { android.os.Trace.beginSection("MC swap"); try {
-            MiniPlayerRuntime.hmcFrameTicks++
             val s = swap ?: return
             val dt = if (s.last == 0L) 1f / 120f
                 else ((frameTimeNanos - s.last) / 1e9f).coerceIn(0f, 0.05f)
@@ -3393,9 +3093,6 @@ private class MiniPlayerController(
                           flingPx: Float = 0f,
                           /** ColorOS: the next island takes the capsule as a notification comes in (Swap.popIn). */
                           popIn: Boolean = false) {
-        Xp.log("MCPkg: swap start ${oldBig?.takeLast(9)}/${oldSmall?.takeLast(9)} kind=$kind " +
-            "intoSmall=$intoSmall spread=${spread != null} morph=${morph != null} " +
-            "at ${android.os.SystemClock.uptimeMillis()}")
         val view = player ?: return
         // A switch cut short goes on from what it was drawing, at its speed - the super island's
         // folme.to from the current value and velocity. Restarted from rest, the pill lost its
@@ -3978,8 +3675,6 @@ private class MiniPlayerController(
     private fun endGhosts() {
         ghostPill?.let {
             if (it.visibility == View.VISIBLE) {
-                Xp.log("MCPkg: ghost pill gone at ${android.os.SystemClock.uptimeMillis()} " +
-                    "w=${it.width} h=${it.height} a=${"%.2f".format(it.alpha)}")
             }
             it.endMorph()
             it.setContentBlur(0f)
@@ -4056,7 +3751,6 @@ private class MiniPlayerController(
 
     private val rowFrame = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) { android.os.Trace.beginSection("MC row"); try {
-            MiniPlayerRuntime.hmcFrameTicks++
             if (!rowAnimating) return
             val dt = if (rowLast == 0L) 1f / 120f
                 else ((frameTimeNanos - rowLast) / 1e9f).coerceIn(0f, 0.05f)
@@ -4143,7 +3837,6 @@ private class MiniPlayerController(
 
     private val appearFrame = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) { android.os.Trace.beginSection("MC appear"); try {
-            MiniPlayerRuntime.hmcFrameTicks++
             if (!appearing) return
             val dt = if (appearLast == 0L) 1f / 120f
                 else ((frameTimeNanos - appearLast) / 1e9f).coerceIn(0f, 0.05f)
@@ -4163,11 +3856,6 @@ private class MiniPlayerController(
     /** Nothing else has the pill's frame or is moving the row: a coming-up of its own is right. */
     private fun rowQuiet(): Boolean = !frameTaken() &&
         !rowHeldOff && followRowFade >= 0.99f && !MiniPlayerScene.aodActive
-
-    /** What the row had running and where the stack was, for the wake trace's slow frames. */
-    internal fun wakeState(): String = "busy=" + quietWhy() + " fade=" + "%.2f".format(followRowFade) +
-        " keys=" + islandKeys.size + " sel=" + (selectedIsland?.takeLast(7) ?: "-") +
-        " small=" + (smallKey?.takeLast(6) ?: "-")
 
     /** What keeps the row from being quiet, for `op mini`'s gone lines; "quiet" when nothing does. */
     private fun quietWhy(): String = buildList {
@@ -7785,8 +7473,6 @@ private class MiniPlayerController(
         val busy = morph != null || exchange != null || noteMorphKey != null || group != null ||
             flight != null
         if (busy || player?.visibility != View.VISIBLE) {
-            Xp.log("MCPkg: spread refused ($why) busy=$busy vis=${player?.visibility} " +
-                "at ${android.os.SystemClock.uptimeMillis()}")
             MiniPlayerRuntime.noteTouch("spread refused ($why): busy=$busy; the stack alone")
             LockIslands.openStack(why)
             return
@@ -7861,7 +7547,6 @@ private class MiniPlayerController(
 
     private val spreadFrame = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) { android.os.Trace.beginSection("MC spread"); try {
-            MiniPlayerRuntime.hmcFrameTicks++
             val s = spread ?: return
             if (destroyed || !Main.keyguardLocked() || MiniPlayerScene.keyguardGoingAway) {
                 endSpread(folded = s.progress < 0.5f, why = "lock screen gone")
@@ -11922,106 +11607,10 @@ private class MiniPlayerController(
         controller?.sessionToken?.let(MiniPlayerRuntime::selectMini)
     }
 
-    /**
-     * A real `NotificationBackgroundView` behind the pill (2026-11-18): the notification rows'
-     * own widget, so whatever dresses a row - the ROM's effects and any module that hooks them,
-     * HyperLight's tint and glass included - dresses the pill too, without copying parameters
-     * that cannot reproduce its `onDraw`. Added at the bottom of the pill's own children, so it
-     * only draws once the pill's own material layer stops covering it.
-     */
-    private var rowBackdrop: View? = null
-    private var rowBackdropSize = ""
-    private var rowBackdropShown = false
-
-    /**
-     * The rows' material calls on the hosted `NotificationBackgroundView`, and the handover: the
-     * pill's own material layer stays until the backdrop reports a layer to draw, then steps
-     * aside (2026-11-18).
-     */
-    internal fun applyRowCallsToBackdrop() {
-        val backdrop = rowBackdrop ?: return
-        val calls = MiniPlayerRuntime.rowCallsForBackdrop() ?: return
-        for ((method, args) in calls) {
-            val at = args.indexOfFirst { it is View }
-            if (at < 0) continue
-            val copy = args.copyOf()
-            copy[at] = backdrop
-            runCatching { method.invoke(null, *copy) }
-        }
-        if (rowBackdropShown) return
-        val base = runCatching {
-            backdrop.javaClass.getMethod("getBaseBackgroundLayer").invoke(backdrop)
-        }.getOrNull()
-        if (base != null) {
-            rowBackdropShown = true
-            (player as? MiniPlayerView)?.useRowBackdrop(true)
-            Xp.log("MCMini: row backdrop draws now: base=" + base.javaClass.simpleName)
-        }
-    }
-
-    /** The hosted backdrop's own reading of the material, for the probe line. */
-    private fun sizeRowBackdrop(w: Int, h: Int) {
-        val v = rowBackdrop ?: return
-        if (w <= 0 || h <= 0) return
-        val size = w.toString() + "x" + h
-        if (size == rowBackdropSize) return
-        rowBackdropSize = size
-        runCatching {
-            v.javaClass.getMethod("setActualWidth", Int::class.javaPrimitiveType).invoke(v, w)
-            v.javaClass.getMethod("setActualHeight", Int::class.javaPrimitiveType).invoke(v, h)
-            v.javaClass.getMethod("setRadius", Float::class.javaPrimitiveType,
-                Float::class.javaPrimitiveType).invoke(v, h / 2f, h / 2f)
-            Xp.log("MCMini: row backdrop sized " + size +
-                " blur=" + runCatching { v.javaClass.getMethod("isBlurEnabled").invoke(v) }.getOrNull() +
-                " base=" + runCatching { v.javaClass.getMethod("getBaseBackgroundLayer").invoke(v) }
-                    .getOrNull()?.javaClass?.simpleName +
-                " stateful=" + runCatching { v.javaClass.getMethod("getStatefulBackgroundLayer").invoke(v) }
-                    .getOrNull()?.javaClass?.simpleName)
-        }
-    }
-
-    private fun hostRowBackdrop(pill: View) {
-        if (rowBackdrop != null) return
-        val v = runCatching {
-            val cls = Xp.findClass("com.android.systemui.statusbar.notification.row." +
-                "NotificationBackgroundView", loader)
-            val ctor = cls.constructors.firstOrNull {
-                it.parameterTypes.isNotEmpty() && it.parameterTypes[0] == Context::class.java
-            } ?: error("no (Context, ...) constructor")
-            ctor.isAccessible = true
-            val args = Array(ctor.parameterTypes.size) { i ->
-                if (ctor.parameterTypes[i] == Context::class.java) context else null
-            }
-            ctor.newInstance(*args) as View
-        }.getOrElse { e ->
-            Xp.log("MCMini: row backdrop cannot be made: $e")
-            return
-        }
-        runCatching {
-            (pill as ViewGroup).addView(v, 0, android.widget.FrameLayout.LayoutParams(-1, -1))
-            v.javaClass.getMethod("setBlurBackgroundEnabled", Boolean::class.javaPrimitiveType)
-                .invoke(v, true)
-            v.javaClass.getMethod("setOnKeyguard", Boolean::class.javaPrimitiveType)
-                .invoke(v, true)
-            v.javaClass.getMethod("chooseBackgroundBlurContainer", View::class.java)
-                .invoke(v, host)
-            Xp.log("MCMini: row backdrop hosted: " + v.javaClass.simpleName +
-                " children=" + (pill as ViewGroup).childCount)
-            v.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or, ob ->
-                if (r - l != or - ol || b - t != ob - ot) sizeRowBackdrop(r - l, b - t)
-            }
-        }.onFailure { Xp.log("MCMini: row backdrop not attached: $it") }
-        rowBackdrop = v
-    }
-
     fun refresh() {
         if (spread != null) spreadRefreshCount++
         if (Looper.myLooper() != Looper.getMainLooper()) { scheduleRefresh(); return }
-        // Its share of the main thread, for the wake trace: what is left of `cpu` is everything
-        // else in this process - SystemUI's own drawing, the wallpaper's callbacks.
-        val cpuStart = android.os.Debug.threadCpuTimeNanos()
         runCatching { refreshUnsafe() }.onFailure { Xp.w("MCMini: refresh failed: $it") }
-        MiniPlayerRuntime.noteCpu(android.os.Debug.threadCpuTimeNanos() - cpuStart)
     }
 
     private fun scheduleRefresh() {
@@ -12157,14 +11746,11 @@ private class MiniPlayerController(
             // a switch here took the next island's coming-up from its first frame (`op mini`: up done
             // frames=1), and it grows in as a new row instead.
             val oldSmall = smallKey
-            Xp.log("MCPkg: lost sel=${previous?.takeLast(9)} keys=${islandKeys.joinToString(",") { it.takeLast(9) }} " +
-                "small=${oldSmall?.takeLast(9)} spread=${spread != null} at ${android.os.SystemClock.uptimeMillis()}")
             handler.post { if (swap == null && morph == null) startSwap(null, oldSmall, popIn = colorOs()) }
         }
         val view = player ?: MiniPlayerView(context).also {
             player = it
             host.addView(it, lockScreenLayerIndex(), ViewGroup.LayoutParams(1, 1))
-            hostRowBackdrop(it)
         }
         if (music != null) trackMusic(music)
         // A notification let out and on its way home to the pill is not among the notes yet - nor
