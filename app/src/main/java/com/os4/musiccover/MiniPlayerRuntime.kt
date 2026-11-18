@@ -11816,7 +11816,7 @@ private class MiniPlayerController(
             return
         }
         runCatching {
-            (pill as ViewGroup).addView(v, 0, FrameLayout.LayoutParams(-1, -1))
+            (pill as ViewGroup).addView(v, 0, android.widget.FrameLayout.LayoutParams(-1, -1))
             v.javaClass.getMethod("setBlurBackgroundEnabled", Boolean::class.javaPrimitiveType)
                 .invoke(v, true)
             v.javaClass.getMethod("setOnKeyguard", Boolean::class.javaPrimitiveType)
