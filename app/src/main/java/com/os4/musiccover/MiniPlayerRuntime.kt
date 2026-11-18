@@ -518,6 +518,16 @@ object MiniPlayerRuntime {
                     Xp.api().hook(m).intercept { chain ->
                         val list = recording
                         val bg = recordTarget
+                        // A notification row's own tint (2026-11-18). The pill and the two discs
+                        // were dressed with the MEDIA CARD's blend colours - a card's tint is
+                        // pinker and more see-through than a row's; the rows' is the white-ish
+                        // frost the user wants them to match. Captured here, off the rows' own
+                        // background views, and put on ours after the recipe (applyRowBlend).
+                        val first = chain.args.firstOrNull()
+                        if (first is View && first.javaClass.name.endsWith("NotificationBackgroundView")) {
+                            rowBlendArgs = chain.args.toTypedArray()
+                            rowBlendMethod = m
+                        }
                         if (list == null || bg == null || recordDepth > 0) return@intercept chain.proceed()
                         val args = chain.args.toTypedArray()
                         val at = args.indexOfFirst { it === bg }
@@ -2117,6 +2127,37 @@ object MiniPlayerRuntime {
         false
     }
 
+    /** The rows' blend-colour call, as one of them was last dressed with it (2026-11-18). */
+    private var rowBlendArgs: Array<Any?>? = null
+    private var rowBlendMethod: java.lang.reflect.Method? = null
+    private var rowBlendLogged = ""
+
+    /**
+     * The notification rows' tint on one of ours: the same `MiBlurCompat` call a row takes, with
+     * our view in the place of the row's background view. Without it the pill and the discs keep
+     * the media card's blend colours, which are pinker and more see-through than a row's.
+     */
+    private fun applyRowBlend(view: ImageView) {
+        val args = rowBlendArgs ?: return
+        val method = rowBlendMethod ?: return
+        val copy = args.copyOf()
+        val at = copy.indexOfFirst { it is View }
+        if (at < 0) return
+        copy[at] = view
+        runCatching { method.invoke(null, *copy) }.onFailure {
+            if (rowBlendLogged.isEmpty()) {
+                rowBlendLogged = "failed"
+                Xp.w("MCMini: the rows' blend colours cannot be applied: $it")
+            }
+        }
+        val colours = args.firstOrNull { it is IntArray } as? IntArray
+        val sig = colours?.joinToString(",") ?: "none"
+        if (sig != rowBlendLogged) {
+            rowBlendLogged = sig
+            Xp.log("MCMini: material tint follows the notification rows: $sig")
+        }
+    }
+
     internal fun material(view: ImageView, classLoader: ClassLoader) {
         if (configuredBackground(view)) return
         // Clear only our previous custom blur before replaying the native recipe.
@@ -2131,6 +2172,8 @@ object MiniPlayerRuntime {
             }
         }.onFailure { Xp.log("MCMini: custom backdrop reset failed: $it") }
         val ctx = view.context
+        // The rows' tint over the card's, when the rows have been seen dressing (2026-11-18).
+        applyRowBlend(view)
         runCatching {
             val res = ctx.resources
             fun id(type: String, name: String): Int =
