@@ -518,6 +518,28 @@ object MiniPlayerRuntime {
                     Xp.api().hook(m).intercept { chain ->
                         val list = recording
                         val bg = recordTarget
+                        // Read-only probe (`op glassprobe`): what the lock screen's big clock is
+                        // dressed with. Its glass comes from these static calls, so the parameters
+                        // are readable here - unlike a notification row's, which is drawn in its
+                        // own onDraw (2026-11-18).
+                        if (glassProbe && glassProbeLeft > 0) {
+                            val target = chain.args.firstOrNull { it is View } as? View
+                            if (target != null) {
+                                val key = target.javaClass.simpleName + "/" + m.name
+                                val text = chain.args.joinToString(",") { arg ->
+                                    when (arg) {
+                                        is IntArray -> arg.joinToString("/")
+                                        is FloatArray -> arg.joinToString("/") { "%.2f".format(it) }
+                                        is View -> arg.javaClass.simpleName
+                                        else -> arg?.toString() ?: "null"
+                                    }
+                                }
+                                if (glassSeen.add(key + "|" + text) && glassProbeLeft > 0) {
+                                    glassProbeLeft--
+                                    Xp.log("MCGlass: " + key + " args=" + text)
+                                }
+                            }
+                        }
                         // What a NOTIFICATION ROW is dressed with (2026-11-18): the same static
                         // calls, on the row's own background view. Recorded off the rows rather
                         // than the media card, because another module (HyperLight) dresses both -
@@ -2142,6 +2164,28 @@ object MiniPlayerRuntime {
         Xp.log("MCMini: configured background unavailable: $it")
         false
     }
+
+    // ---- the lock screen clock's glass, read-only probe
+
+    /**
+     * `op glassprobe --ez on true`: every material call the clock is dressed with, logged as
+     * `MCGlass:` - the target's class, the method and its arguments. Read only: nothing is
+     * applied from it, and it stops by itself after [GLASS_PROBE_MAX] lines or with `on false`.
+     */
+    @Volatile private var glassProbe = false
+    @Volatile private var glassProbeLeft = 0
+    private val glassSeen = HashSet<String>()
+
+    @JvmStatic fun setGlassProbe(on: Boolean) {
+        glassProbe = on
+        if (on) {
+            synchronized(glassSeen) { glassSeen.clear() }
+            glassProbeLeft = GLASS_PROBE_MAX
+        }
+        Xp.log("MCGlass: probe " + (if (on) "on, up to " + GLASS_PROBE_MAX + " lines" else "off"))
+    }
+
+    private const val GLASS_PROBE_MAX = 160
 
     /** The rows' material calls, as heavily dressed rows last took them (2026-11-18). */
     private var rowCalls: MutableList<Pair<java.lang.reflect.Method, Array<Any?>>>? = null
