@@ -62,10 +62,13 @@ object MiniPlayerRuntime {
 
     @JvmStatic fun configJson(context: Context): String = MiniPlayerConfig.fromPreferences(prefs(context))
 
-    // 鈹€鈹€ 灞曞紑鐘舵€佽蹇嗭紙2026-11-15锛岀敤鎴疯姹傦級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-    // 鍝竴涓矝鏄睍寮€鐨勶紝鎸佷箙鍖栧埌 hmc_mini锛氭墜鍔ㄥ睍寮€鍐欎笅鏉ワ紝鎵嬪姩鏀惰捣娓呮帀銆?    // 閿佸睆閲嶅缓鍚?refresh 浼氬彂鐜拌繖涓敭銆佽杩樺湪銆佽€屽張娌℃湁鍒殑灞曞紑鐫€锛屽氨鎶婂畠閲嶆柊鎵撳紑銆?    // 鍙湪"鎵嬪姩鏀惰捣"鏃舵竻闄?鈬?鎹㈡瓕銆侀攣灞忋€侀噸鍚墜鏈洪兘淇濇寔鐢ㄦ埛鏈€鍚庝竴娆＄殑閫夋嫨銆?    private const val PREF_EXPANDED = "expanded_key"
+    // ── 展开状态记忆（2026-11-15，用户要求）──────────────────────────────
+    // 哪一个岛是展开的，持久化到 hmc_mini：手动展开写下来，手动收起清掉。
+    // 锁屏重建后 refresh 会发现这个键、行还在、而又没有别的展开着，就把它重新打开。
+    // 只在"手动收起"时清除 ⇒ 换歌、锁屏、重启手机都保持用户最后一次的选择。
+    private const val PREF_EXPANDED = "expanded_key"
 
-    /** 璁颁笅鐢ㄦ埛鏈€鍚庝竴娆″睍寮€鐨勫崱鐗囷紱null = 鐢ㄦ埛鎵嬪姩鏀惰捣锛屼箣鍚庝笉鍐嶈嚜鍔ㄥ睍寮€銆?*/
+    /** 记下用户最后一次展开的卡片；null = 用户手动收起，之后不再自动展开。 */
     @JvmStatic fun rememberExpanded(key: String?) {
         val ctx = Main.sAppCtx ?: return
         val p = prefs(ctx)
@@ -1605,9 +1608,9 @@ object MiniPlayerRuntime {
      *    spread) - 0 means the slow frame was not ours to draw,
      *  - what the row had running (`busy=`) and where the stack was (`st=`).
      *
-     * Turned on by the screen coming on, and costing nothing outside its three seconds: it is not
-     * a hook, one FrameCallback posting itself while it lasts. `MCMini: wake trace done` at the end
-     * carries frames / slow / worst / the worst frame's CPU.
+     * Turned on by the screen coming on, and costing nothing outside its three seconds: one
+     * FrameCallback posting itself while it lasts. `MCMini: wake trace done` at the end carries
+     * frames / slow / worst / the worst frame's CPU.
      */
     @JvmStatic fun beginWakeTrace(why: String) {
         if (wakeTracing) return
@@ -1661,8 +1664,10 @@ object MiniPlayerRuntime {
                         wakeTraceWorstCpu = cpu
                     }
                     val state = live().firstOrNull()?.wakeState() ?: "no row"
-                    val line = "MCWake: slow dt=${"%.1f".format(dt)} cpu=${"%.1f".format(cpu)} " +
-                        "own=${ticks - wakeTraceLastTicks} st=${NumState.state()} $state"
+                    val line = "MCWake: slow dt=" + "%.1f".format(dt) +
+                        " cpu=" + "%.1f".format(cpu) +
+                        " own=" + (ticks - wakeTraceLastTicks) +
+                        " st=" + NumState.state() + " " + state
                     synchronized(wakeTraceLines) {
                         wakeTraceLines.addLast(line)
                         while (wakeTraceLines.size > WAKE_TRACE_KEEP) wakeTraceLines.removeFirst()
@@ -1680,8 +1685,9 @@ object MiniPlayerRuntime {
                     wakeTraceLines.forEach { Xp.log(it) }
                     wakeTraceLines.clear()
                 }
-                Xp.log("MCMini: wake trace done frames=$wakeTraceFrames slow=$wakeTraceSlow " +
-                    "worst=${"%.1f".format(wakeTraceWorst)}ms cpu=${"%.1f".format(wakeTraceWorstCpu)}ms")
+                Xp.log("MCMini: wake trace done frames=" + wakeTraceFrames + " slow=" + wakeTraceSlow +
+                    " worst=" + "%.1f".format(wakeTraceWorst) + "ms cpu=" +
+                    "%.1f".format(wakeTraceWorstCpu) + "ms")
             }
         }
     }
@@ -3919,7 +3925,7 @@ private class MiniPlayerController(
 
     /** The clock going into the cover or out of it: the row is put away or brought back by that, not by its islands. */
     private fun coverMoving(): Boolean = Main.coverSceneActive() && ClockCollapse.phase().let {
-        // The cover's clock only: 楂樺痉's map moves the same clock and puts nothing away.
+        // The cover's clock only: 高德's map moves the same clock and puts nothing away.
         it == ClockCollapse.Phase.ENTER || it == ClockCollapse.Phase.EXIT
     }
 
@@ -3957,11 +3963,13 @@ private class MiniPlayerController(
         !rowHeldOff && followRowFade >= 0.99f && !MiniPlayerScene.aodActive
 
     /** What the row had running and where the stack was, for the wake trace's slow frames. */
-    internal fun wakeState(): String = "busy=${quietWhy()} fade=${"%.2f".format(followRowFade)} " +
-        "keys=${islandKeys.size} sel=${selectedIsland?.takeLast(7)} small=${smallKey?.takeLast(6)}"
+    internal fun wakeState(): String = "busy=" + quietWhy() + " fade=" + "%.2f".format(followRowFade) +
+        " keys=" + islandKeys.size + " sel=" + (selectedIsland?.takeLast(7) ?: "-") +
+        " small=" + (smallKey?.takeLast(6) ?: "-")
 
     /** What keeps the row from being quiet, for `op mini`'s gone lines; "quiet" when nothing does. */
-    private fun quietWhy(): String = buildList {        if (swap != null) add("swap")
+    private fun quietWhy(): String = buildList {
+        if (swap != null) add("swap")
         if (morph != null) add("morph")
         if (group != null) add("group")
         if (flight != null) add("flight")
@@ -6162,7 +6170,7 @@ private class MiniPlayerController(
                 if (coming) seen?.append('C')
                 // The media card the pill stands in for is kept INVISIBLE, still laid out (see
                 // the setVisibility hook in install): the clock gave way to it too (2026-09-26).
-                // Folded into the stack's "N涓€氱煡" state, a row is laid out and drawn at nothing
+                // Folded into the stack's "N个通知" state, a row is laid out and drawn at nothing
                 // (its numStateAlpha): not there for the clock either. Only while the stack says it
                 // is folded - opening, the rows fade in from nothing and count from the first frame.
                 val folded = NumState.inNumber == true && foldedAway(c)
@@ -7604,7 +7612,7 @@ private class MiniPlayerController(
             it.getLocationOnScreen(xy)
             xy[1] + if (pinned?.get() === it) pinnedDy else 0f
         }
-        // A page up behind the lock screen (楂樺痉's map, a countdown) goes: the list opens on the
+        // A page up behind the lock screen (高德's map, a countdown) goes: the list opens on the
         // plain lock screen, the page's notification one of its cards (the user, 2026-09-30).
         LockIslands.closeSceneForList()
         // Out as their cards already: in the list as they are, and home with the rest when it
@@ -10398,7 +10406,7 @@ private class MiniPlayerController(
 
     /**
      * [key]'s row, and the stack's own row it is in: itself, or the group it is a child of. The
-     * system groups an app's notifications by itself (楂樺痉's navigation came as two children of
+     * system groups an app's notifications by itself (高德's navigation came as two children of
      * an Aggregate_SilentSection summary), and looked for among the stack's rows alone a child
      * was never found: the media card's morph left its row standing, unfolded (2026-09-25).
      */
@@ -11985,7 +11993,7 @@ private class MiniPlayerController(
             lastTrack = ""
         }
         val metadata = metadataOf(current)
-        // The song, not the title: Salt, 姹芥按 and QQ sing into TITLE, and every line threw the
+        // The song, not the title: Salt, 汽水 and QQ sing into TITLE, and every line threw the
         // artwork away as a track change (#47, #56).
         val track = TrackName.songKey(current.packageName, metadata).ifEmpty {
             current.packageName + "|" + metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
@@ -12023,7 +12031,7 @@ private class MiniPlayerController(
         val shown = traced("MC b.thumb") { thumbnailFor(musicCover(metadata), view) }
         view.setToggleShown(true)
         view.bind(
-            metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty().ifBlank { SystemUiLanguage.text("姝ｅ湪鎾斁", "Now playing") },
+            metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty().ifBlank { SystemUiLanguage.text("正在播放", "Now playing") },
             metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
                 .ifBlank { metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty() },
             shown,
@@ -12069,7 +12077,7 @@ private class MiniPlayerController(
             icon = { TextFaceDrawable("${note.count}+", android.graphics.Color.WHITE,
                 13f * context.resources.displayMetrics.scaledDensity) },
             background = { null },
-            label = SystemUiLanguage.text("${note.count} 鏉￠€氱煡", "${note.count} notifications"),
+            label = SystemUiLanguage.text("${note.count} 条通知", "${note.count} notifications"),
             onClick = { expandNote(note.key) },
             wide = true,
         ) else null
@@ -13476,7 +13484,7 @@ private const val SPREAD_LIST_DRAG_ACTION_DP = 60f
 private const val SPREAD_FOLD_RESPONSE = 0.35f
 private const val SPREAD_FOLD_DAMPING = 0.75f
 
-// ColorOS SystemUI CapsuleSpringAnimParams.SwitchParams ("鏂板鍔ㄧ敾_1鍒板"), (bounce, response)
+// ColorOS SystemUI CapsuleSpringAnimParams.SwitchParams ("新增动画_1到多"), (bounce, response)
 // as damping 1 - bounce. Width: (0.4, 0.9) with an initial -3500 px/s at 560 dpi (the light
 // level; -4800 full) - the kick that makes it dip before it opens to the new width.
 private const val UPDATE_WIDTH_RESPONSE = 0.9f
