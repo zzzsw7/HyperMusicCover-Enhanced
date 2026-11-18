@@ -3905,6 +3905,9 @@ private class MiniPlayerController(
         backStartedAt = android.os.SystemClock.uptimeMillis()
         growHeldSince = backStartedAt
         view.beginMorph(layoutOnly = true)
+        // Sharp from the first frame of the coming-up, and left sharp: applyAppear does not blur
+        // it frame by frame any more (2026-11-18).
+        view.setContentBlur(0f)
         appearing = true
         appearLast = 0L
         // The row's spring still holds wherever the pill was last shown: set afresh by the next
@@ -3958,6 +3961,9 @@ private class MiniPlayerController(
         backDrawn = 0
         backMinW = Float.NaN
         backStartedAt = android.os.SystemClock.uptimeMillis()
+        // Sharp on the way out too: what a swap or a morph cut short may have left is cleared
+        // once here, not faded frame by frame (2026-11-18).
+        view.setContentBlur(0f)
         view.setInteractionsEnabled(false)
     }
 
@@ -3970,8 +3976,9 @@ private class MiniPlayerController(
         val rest = view.restBoxOnScreen() ?: return true
         val xy = IntArray(2).also(host::getLocationOnScreen)
         // The row as its own spring has it, grown out of its own middle: scaled up from
-        // APPEAR_SCALE, faded and blurred in, and back the same way (the maintainer's pick,
-        // 2026-10-24, over growing out of a circle at its left end).
+        // APPEAR_SCALE and faded in, and back the same way (the maintainer's pick, 2026-10-24,
+        // over growing out of a circle at its left end). Sharp, not blurred: applyAppear does not
+        // touch the content blur (2026-11-18).
         val fullW = (if (rowKnown) rowWidth.value else rest.w).coerceAtLeast(rest.h)
         val left = if (rowKnown) xy[0] + rowLeft.value else rest.x
         val p = appear.value.coerceIn(0f, 1.2f)
@@ -3990,7 +3997,12 @@ private class MiniPlayerController(
         view.setAppearScale(s)
         view.setMorphFrame(CoverMorphMotion.Box(left + (fullW - w) / 2f, rest.y + (rest.h - h) / 2f, w, h), h / 2f, a)
         view.setContentAlpha(a)
-        view.setContentBlur((1f - a) * APPEAR_BLUR_DP * density())
+        // No blur per frame here (and none on the way out): setContentBlur makes a new
+        // RenderEffect and re-runs the blur pass every time its radius moves, so the row's
+        // coming-up spent a whole GPU pass a frame on a pill that is fading in anyway - at the
+        // wake, when the spatial wallpaper's own AOD exit is on the same thread, those were the
+        // dropped frames (traced 2026-11-18: 0.58% janky / 99%=53ms against 0.33% / 48ms
+        // settled). Clear once in startAppear; sharp from the first frame.
         return true
     }
 
