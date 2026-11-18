@@ -529,6 +529,17 @@ object MiniPlayerRuntime {
                             chain.args.any { it is IntArray }) {
                             rowBlendArgs = chain.args.toTypedArray()
                             rowBlendMethod = m
+                            // The row's own background, as it stands after the modules above this
+                            // one (HyperLight dresses it first): the pill takes the card's tint
+                            // from the recipe AND this drawable, which is the other half of the
+                            // rows' look (2026-11-18).
+                            if (rowBgState == null) {
+                                rowBgState = runCatching { first.background?.constantState }.getOrNull()
+                                rowBgState?.let {
+                                    Xp.log("MCMini: the rows' background taken: " +
+                                        (it.newDrawable()?.javaClass?.simpleName ?: "?"))
+                                }
+                            }
                             if (rowBlendLogged.isEmpty()) {
                                 rowBlendLogged = "captured"
                                 Xp.log("MCMini: the rows' tint captured: " + m.name +
@@ -2139,12 +2150,20 @@ object MiniPlayerRuntime {
     private var rowBlendMethod: java.lang.reflect.Method? = null
     private var rowBlendLogged = ""
 
+    /** A notification row's own background, as the modules above dressed it (2026-11-18). */
+    private var rowBgState: android.graphics.drawable.Drawable.ConstantState? = null
+
     /**
      * The notification rows' tint on one of ours: the same `MiBlurCompat` call a row takes, with
      * our view in the place of the row's background view. Without it the pill and the discs keep
      * the media card's blend colours, which are pinker and more see-through than a row's.
      */
     private fun applyRowBlend(view: ImageView) {
+        // The row's own background over the card's (2026-11-18): the tint alone left the pill
+        // pinker and more see-through than the rows.
+        rowBgState?.let { state ->
+            runCatching { state.newDrawable(view.resources)?.mutate()?.let { view.background = it } }
+        }
         val args = rowBlendArgs ?: return
         val method = rowBlendMethod ?: return
         val copy = args.copyOf()
