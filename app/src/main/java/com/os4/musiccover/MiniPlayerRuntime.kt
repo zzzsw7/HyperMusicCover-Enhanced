@@ -524,9 +524,16 @@ object MiniPlayerRuntime {
                         // frost the user wants them to match. Captured here, off the rows' own
                         // background views, and put on ours after the recipe (applyRowBlend).
                         val first = chain.args.firstOrNull()
-                        if (first is View && first.javaClass.name.endsWith("NotificationBackgroundView")) {
+                        if (first is View && first.javaClass.name.endsWith("NotificationBackgroundView") &&
+                            m.name.startsWith("setMiBackgroundBlendColors") &&
+                            chain.args.any { it is IntArray }) {
                             rowBlendArgs = chain.args.toTypedArray()
                             rowBlendMethod = m
+                            if (rowBlendLogged.isEmpty()) {
+                                rowBlendLogged = "captured"
+                                Xp.log("MCMini: the rows' tint captured: " + m.name +
+                                    " colours=" + (chain.args.firstOrNull { it is IntArray } as IntArray).size)
+                            }
                         }
                         if (list == null || bg == null || recordDepth > 0) return@intercept chain.proceed()
                         val args = chain.args.toTypedArray()
