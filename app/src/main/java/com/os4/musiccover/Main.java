@@ -9069,7 +9069,10 @@ public class Main extends XposedModule {
             // ink=404 target=558 left the text at 696 with the inset, 558 without).
             float dx = target - inkCenter;
             long nowMs = android.os.SystemClock.uptimeMillis();
-            if (nowMs - sCardCentreLogAt > 1000L) {
+            // At most once a second, and only with detailed logging on: this is a layout-time
+            // diagnostic and it ran a second apart for as long as the card stayed settled - 59 of
+            // the module's ~197 log lines a minute on an idle lock screen (2026-11-18).
+            if (Xp.verbose() && nowMs - sCardCentreLogAt > 1000L) {
                 sCardCentreLogAt = nowMs;
                 Xp.log(TAG + "card centre: cardW=" + card.getWidth()
                         + " pad=" + card.getPaddingLeft() + "/" + card.getPaddingRight()
