@@ -12878,8 +12878,15 @@ private class MiniPlayerController(
                 // under a flight, a card's morph or a switch, or with the row's wake fade, those
                 // bring it; and a row going just goes.
                 val newRow = lastShownKeys.isEmpty()
+                // Waking, the row is put there at once, with no growing in: its coming-up ran
+                // through the wake's own fade - ~72 frames of the pill redrawn (an `op mini` up
+                // done 584ms frames=72) inside the window where SystemUI draws the lock screen for
+                // the first time and drops frames whatever else is on (traced 2026-11-18; the
+                // spatial wallpaper A/B'd out of it). The row still fades in with the lock screen:
+                // followShortcuts multiplies its alpha by the keyguard's own (followRowFade).
+                val wakeFade = newRow && followRowFade < 0.99f && Main.screenOnCached()
                 val growIn = target == View.VISIBLE && keyguardOwned && !frameTaken() &&
-                    (rowQuiet() && Main.screenOnCached() || newRow)
+                    (rowQuiet() && Main.screenOnCached() || newRow) && !wakeFade
                 // The last island gone from a lock screen that stays: it goes back into nothing.
                 // Not for a row put away with the card, the cover, the unlock or the control centre.
                 // The pill still has a notification in it and nothing is left for the row: no
