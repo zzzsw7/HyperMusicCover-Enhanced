@@ -1618,6 +1618,7 @@ object MiniPlayerRuntime {
         wakeTraceEnd = android.os.SystemClock.uptimeMillis() + WAKE_TRACE_MS
         wakeTraceLastVsync = 0L
         wakeTraceLastCpu = android.os.Debug.threadCpuTimeNanos()
+        wakeTraceLastOwnCpuNs = hmcCpuNs
         wakeTraceLastTicks = hmcFrameTicks
         wakeTraceFrames = 0
         wakeTraceSlow = 0
@@ -1634,6 +1635,7 @@ object MiniPlayerRuntime {
     private var wakeTraceLastVsync = 0L
     private var wakeTraceLastCpu = 0L
     private var wakeTraceLastTicks = 0
+    private var wakeTraceLastOwnCpuNs = 0L
     private var wakeTraceFrames = 0
     private var wakeTraceSlow = 0
     private var wakeTraceWorst = 0f
@@ -1647,15 +1649,24 @@ object MiniPlayerRuntime {
     /** Frames this module's own animation callbacks ran on, counted for the wake trace. */
     internal var hmcFrameTicks = 0
 
+    /** CPU spent inside this module's own work between two frames, for the wake trace. */
+    internal var hmcCpuNs = 0L
+
+    internal fun noteCpu(ns: Long) {
+        if (ns > 0L) hmcCpuNs += ns
+    }
+
     private val wakeTraceFrame = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             if (!wakeTracing) return
             val now = android.os.SystemClock.uptimeMillis()
             val cpuNow = android.os.Debug.threadCpuTimeNanos()
             val ticks = hmcFrameTicks
+            val ownCpuNs = hmcCpuNs
             if (wakeTraceLastVsync != 0L) {
                 val dt = (frameTimeNanos - wakeTraceLastVsync) / 1e6f
                 val cpu = (cpuNow - wakeTraceLastCpu) / 1e6f
+                val ours = (ownCpuNs - wakeTraceLastOwnCpuNs) / 1e6f
                 wakeTraceFrames++
                 if (dt > WAKE_SLOW_MS) {
                     wakeTraceSlow++
@@ -1666,6 +1677,7 @@ object MiniPlayerRuntime {
                     val state = live().firstOrNull()?.wakeState() ?: "no row"
                     val line = "MCWake: slow dt=" + "%.1f".format(dt) +
                         " cpu=" + "%.1f".format(cpu) +
+                        " ours=" + "%.1f".format(ours) +
                         " own=" + (ticks - wakeTraceLastTicks) +
                         " st=" + NumState.state() + " " + state
                     synchronized(wakeTraceLines) {
@@ -1676,6 +1688,7 @@ object MiniPlayerRuntime {
             }
             wakeTraceLastVsync = frameTimeNanos
             wakeTraceLastCpu = cpuNow
+            wakeTraceLastOwnCpuNs = ownCpuNs
             wakeTraceLastTicks = ticks
             if (now < wakeTraceEnd) {
                 Choreographer.getInstance().postFrameCallback(this)
@@ -11723,7 +11736,11 @@ private class MiniPlayerController(
     fun refresh() {
         if (spread != null) spreadRefreshCount++
         if (Looper.myLooper() != Looper.getMainLooper()) { scheduleRefresh(); return }
+        // Its share of the main thread, for the wake trace: what is left of `cpu` is everything
+        // else in this process - SystemUI's own drawing, the wallpaper's callbacks.
+        val cpuStart = android.os.Debug.threadCpuTimeNanos()
         runCatching { refreshUnsafe() }.onFailure { Xp.w("MCMini: refresh failed: $it") }
+        MiniPlayerRuntime.noteCpu(android.os.Debug.threadCpuTimeNanos() - cpuStart)
     }
 
     private fun scheduleRefresh() {

@@ -1196,6 +1196,7 @@ internal object LockIslands {
 
     /** The islands put together from the last run: the focus ones and the stack island. */
     private fun publish() {
+        val cpuStart = android.os.Debug.threadCpuTimeNanos()
         updateNotificationArtwork()
         val stack = stackNote?.takeIf { !stackOut }
         // Spread out, the count stays hidden too: the row folding back comes into its place. So
@@ -1213,11 +1214,15 @@ internal object LockIslands {
         }
         // Unchanged is the same reading (read() hands back the cached note): by key and time, a
         // stopwatch paused or resumed - its `when` the same - never reached the island.
-        if (next.size == notes.size && next.indices.all { next[it] === notes[it] }) return
+        if (next.size == notes.size && next.indices.all { next[it] === notes[it] }) {
+            MiniPlayerRuntime.noteCpu(android.os.Debug.threadCpuTimeNanos() - cpuStart)
+            return
+        }
         notes = next
         Xp.log("MCPkg: publish pkg=${pkgNotes.size} hidden=$pkgHidden out=$stackOut size=${next.size} " +
             "at ${android.os.SystemClock.uptimeMillis()} next=" + next.joinToString(",") { it.key.takeLast(9) })
         main.post { listeners.forEach { runCatching { it() } } }
+        MiniPlayerRuntime.noteCpu(android.os.Debug.threadCpuTimeNanos() - cpuStart)
     }
 
     /**
