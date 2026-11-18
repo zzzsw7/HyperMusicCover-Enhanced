@@ -2169,6 +2169,26 @@ object MiniPlayerRuntime {
                 }
             }
         }
+        // The same calls on the hosted NotificationBackgroundView: unlike an ImageView it draws
+        // the material itself, so this is the one target where a row's own calls can land. Shown
+        // only once it reports a layer to draw - the pill's material stays until then (2026-11-18).
+        val backdrop = rowBackdrop ?: return
+        for ((method, args) in calls) {
+            val at = args.indexOfFirst { it is View }
+            if (at < 0) continue
+            val copy = args.copyOf()
+            copy[at] = backdrop
+            runCatching { method.invoke(null, *copy) }
+        }
+        if (rowBackdropShown) return
+        val base = runCatching {
+            backdrop.javaClass.getMethod("getBaseBackgroundLayer").invoke(backdrop)
+        }.getOrNull()
+        if (base != null) {
+            rowBackdropShown = true
+            (player as? MiniPlayerView)?.useRowBackdrop(true)
+            Xp.log("MCMini: row backdrop draws now: base=" + base.javaClass.simpleName)
+        }
     }
 
     internal fun material(view: ImageView, classLoader: ClassLoader) {
@@ -11798,6 +11818,7 @@ private class MiniPlayerController(
      */
     private var rowBackdrop: View? = null
     private var rowBackdropSize = ""
+    private var rowBackdropShown = false
 
     /** The hosted backdrop's own reading of the material, for the probe line. */
     private fun sizeRowBackdrop(w: Int, h: Int) {
@@ -11847,7 +11868,6 @@ private class MiniPlayerController(
                 .invoke(v, host)
             Xp.log("MCMini: row backdrop hosted: " + v.javaClass.simpleName +
                 " children=" + (pill as ViewGroup).childCount)
-            (pill as? MiniPlayerView)?.useRowBackdrop(true)
             v.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or, ob ->
                 if (r - l != or - ol || b - t != ob - ot) sizeRowBackdrop(r - l, b - t)
             }
