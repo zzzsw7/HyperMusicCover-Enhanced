@@ -525,11 +525,18 @@ object MiniPlayerRuntime {
                         if (glassProbe && glassProbeLeft > 0) {
                             val target = chain.args.firstOrNull { it is View } as? View
                             if (target != null) {
-                                val key = target.javaClass.simpleName + "/" + m.name
+                                val idName = runCatching {
+                                    if (target.id != View.NO_ID)
+                                        target.resources.getResourceEntryName(target.id) else "-"
+                                }.getOrDefault("-")
+                                val parent = (target.parent as? View)?.javaClass?.simpleName ?: "-"
+                                val key = target.javaClass.simpleName + "#" + idName + "<" + parent +
+                                    "/" + m.name
                                 val text = chain.args.joinToString(",") { arg ->
                                     when (arg) {
                                         is IntArray -> arg.joinToString("/")
-                                        is FloatArray -> arg.joinToString("/") { "%.2f".format(it) }
+                                        is FloatArray -> arg.take(8).joinToString("/") { "%.2f".format(it) } +
+                                            if (arg.size > 8) ".." + arg.size else ""
                                         is View -> arg.javaClass.simpleName
                                         else -> arg?.toString() ?: "null"
                                     }
