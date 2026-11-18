@@ -245,7 +245,6 @@ object MiniPlayerRuntime {
         runCatching { installAodDim(classLoader) }
             .onFailure { Xp.w("MCMini: full-AOD dim unavailable: $it") }
         LockIslands.install(classLoader)
-        ResProbe.install(classLoader)
     }
 
     /** The spread's rows past the stack's pile, kept shown (MiniPlayerController.spreadCardsTo). */
