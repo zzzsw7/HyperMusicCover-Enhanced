@@ -518,6 +518,32 @@ object MiniPlayerRuntime {
                     Xp.api().hook(m).intercept { chain ->
                         val list = recording
                         val bg = recordTarget
+                        // What a NOTIFICATION ROW is dressed with (2026-11-18): the same static
+                        // calls, on the row's own background view. Recorded off the rows rather
+                        // than the media card, because another module (HyperLight) dresses both -
+                        // these are the values as it left them, which the stock getters never
+                        // show. Replayed on the pill and the discs by applyRowCalls.
+                        val first = chain.args.firstOrNull()
+                        if (first is View &&
+                            first.javaClass.name.endsWith("NotificationBackgroundView")) {
+                            val wanted = when {
+                                m.name.startsWith("setMiBackgroundBlendColors") ->
+                                    chain.args.any { it is IntArray }
+                                m.name == "setMiGlassCompat" -> chain.args.any { it is FloatArray }
+                                else -> false
+                            }
+                            if (wanted) {
+                                val calls = rowCalls ?: ArrayList<Pair<java.lang.reflect.Method,
+                                    Array<Any?>>>().also { rowCalls = it }
+                                calls.removeAll { it.first == m }
+                                calls.add(m to chain.args.toTypedArray())
+                                if (!rowCallsLogged) {
+                                    rowCallsLogged = true
+                                    Xp.log("MCMini: the rows' material calls taken: " +
+                                        calls.joinToString(",") { it.first.name })
+                                }
+                            }
+                        }
                         if (list == null || bg == null || recordDepth > 0) return@intercept chain.proceed()
                         val args = chain.args.toTypedArray()
                         val at = args.indexOfFirst { it === bg }
@@ -2117,6 +2143,34 @@ object MiniPlayerRuntime {
         false
     }
 
+    /** The rows' material calls, as heavily dressed rows last took them (2026-11-18). */
+    private var rowCalls: MutableList<Pair<java.lang.reflect.Method, Array<Any?>>>? = null
+    private var rowCallsLogged = false
+    private var rowCallsFailed = false
+
+    /**
+     * The notification rows' own material on one of ours: the same calls a row takes from
+     * `MiBlurCompat` / `MiGlassCompat`, with our view in the row's place. The module's own pill
+     * and discs were dressed from the MEDIA CARD's recipe, and a card's material is not a row's -
+     * with another module (HyperLight) dressing both, only the rows' own calls carry the final
+     * values (its parameter set is not readable from the stock getters).
+     */
+    private fun applyRowCalls(view: ImageView) {
+        val calls = rowCalls ?: return
+        for ((method, args) in calls) {
+            val at = args.indexOfFirst { it is View }
+            if (at < 0) continue
+            val copy = args.copyOf()
+            copy[at] = view
+            runCatching { method.invoke(null, *copy) }.onFailure {
+                if (!rowCallsFailed) {
+                    rowCallsFailed = true
+                    Xp.w("MCMini: the rows' " + method.name + " cannot be applied: " + it)
+                }
+            }
+        }
+    }
+
     internal fun material(view: ImageView, classLoader: ClassLoader) {
         if (configuredBackground(view)) return
         // Clear only our previous custom blur before replaying the native recipe.
@@ -2165,6 +2219,8 @@ object MiniPlayerRuntime {
                 }
             }
             dressedViews.add(view)
+            // The rows' own material over the card's recipe (2026-11-18).
+            applyRowCalls(view)
             // Dressed in the AOD - a small island coming up there: dimmed as the rest are.
             aodDimArgs?.let { run { dimView(view, it) } }
         }.onFailure { error ->
