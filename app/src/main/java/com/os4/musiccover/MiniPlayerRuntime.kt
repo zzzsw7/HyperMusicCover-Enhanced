@@ -2118,7 +2118,8 @@ object MiniPlayerRuntime {
     }
 
     internal fun material(view: ImageView, classLoader: ClassLoader) {
-        if (configuredBackground(view)) return        // Clear only our previous custom blur before replaying the native recipe.
+        if (configuredBackground(view)) return
+        // Clear only our previous custom blur before replaying the native recipe.
         if (configuredBackdropViews.remove(view) == true) runCatching {
             run {
                 for (target in listOfNotNull(view.parent as? View, view)) {
@@ -2164,8 +2165,6 @@ object MiniPlayerRuntime {
                 }
             }
             dressedViews.add(view)
-            // The rows' own material over the card's recipe, when it can be read (2026-11-18).
-            applyRowMaterial(view)
             // Dressed in the AOD - a small island coming up there: dimmed as the rest are.
             aodDimArgs?.let { run { dimView(view, it) } }
         }.onFailure { error ->
@@ -2177,79 +2176,6 @@ object MiniPlayerRuntime {
             view.background = null
             view.setImageDrawable(GradientDrawable().apply { setColor(0x9E1F2324.toInt()) })
         }
-    }
-
-    // ---- the notification rows' material
-
-    /** The last reading of a row's material, so one is not walked to for every dressed view. */
-    private var rowMaterial: IntArray? = null
-    private var rowMaterialAt = 0L
-    private var rowMaterialLogged = ""
-
-    /**
-     * The pill and the two shortcut discs were dressed from the MEDIA CARD's recipe, and a card's
-     * material is not a notification row's: the user asked for the rows' (2026-11-18). The rows'
-     * background views carry the four values the material is made of, and they are readable:
-     * `setMiBackgroundBlurMode` / `BlurRadius` / `setMiViewBlurMode` / `setPassWindowBlurEnabled`
-     * on View, read back by the getters of the same names on
-     * `NotificationBackgroundView` (`op cls` lists them). Read once a second from the first row
-     * found, and put on each dressed view after its recipe - so the tint the recipe leaves is the
-     * rows' material's, on the rows' blur.
-     */
-    internal fun applyRowMaterial(view: View) {
-        val now = android.os.SystemClock.uptimeMillis()
-        if (rowMaterial == null || now - rowMaterialAt > 1000L) {
-            rowMaterialAt = now
-            rowMaterial = readRowMaterial()
-        }
-        val v = rowMaterial ?: return
-        runCatching { backgroundMode.invoke(view, v[0]) }
-        runCatching { backgroundRadius.invoke(view, v[1]) }
-        runCatching { viewBlurMode.invoke(view, v[2]) }
-        runCatching { passWindowBlur.invoke(view, v[3] != 0) }
-        val sig = "mode=" + v[0] + " radius=" + v[1] + " view=" + v[2] + " pass=" + (v[3] != 0)
-        if (sig != rowMaterialLogged) {
-            rowMaterialLogged = sig
-            Xp.log("MCMini: material follows the notification rows: $sig")
-        }
-    }
-
-    /** The four values a notification row's background carries; null when no row is laid out. */
-    private fun readRowMaterial(): IntArray? = runCatching {
-        val root = live().firstOrNull()?.materialRoot() ?: return null
-        val bg = firstRowBackground(root) ?: return null
-        fun int(name: String): Int? = runCatching {
-            bg.javaClass.getMethod(name).invoke(bg) as? Int
-        }.getOrNull()
-        fun bool(name: String): Int = runCatching {
-            if (bg.javaClass.getMethod(name).invoke(bg) as? Boolean == true) 1 else 0
-        }.getOrDefault(0)
-        intArrayOf(
-            int("getMiBackgroundBlurMode") ?: return null,
-            int("getMiBackgroundBlurRadius") ?: return null,
-            int("getMiViewBlurMode") ?: return null,
-            bool("getPassWindowBlurEnabled"),
-        )
-    }.getOrElse {
-        if (!rowMaterialFailed) {
-            rowMaterialFailed = true
-            Xp.w("MCMini: the rows' material cannot be read, the card's is used: $it")
-        }
-        null
-    }
-
-    private var rowMaterialFailed = false
-
-    /** The first notification row's own background view under [root], depth first. */
-    private fun firstRowBackground(root: View): View? {
-        if (root is ViewGroup) {
-            for (i in 0 until root.childCount) {
-                val child = root.getChildAt(i) ?: continue
-                if (child.javaClass.name.endsWith("NotificationBackgroundView")) return child
-                firstRowBackground(child)?.let { return it }
-            }
-        }
-        return null
     }
 }
 
@@ -4053,9 +3979,6 @@ private class MiniPlayerController(
     internal fun wakeState(): String = "busy=" + quietWhy() + " fade=" + "%.2f".format(followRowFade) +
         " keys=" + islandKeys.size + " sel=" + (selectedIsland?.takeLast(7) ?: "-") +
         " small=" + (smallKey?.takeLast(6) ?: "-")
-
-    /** The window's root, for reading a notification row's material (2026-11-18). */
-    internal fun materialRoot(): View? = player?.rootView ?: host.rootView
 
     /** What keeps the row from being quiet, for `op mini`'s gone lines; "quiet" when nothing does. */
     private fun quietWhy(): String = buildList {
