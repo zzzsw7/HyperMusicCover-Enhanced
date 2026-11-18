@@ -290,16 +290,37 @@ final class HyperTweaks {
             ClassLoader cl = bar.getClass().getClassLoader();
             Class<?> targetCls = Xp.findClass(
                     "miuix.miuixbasewidget.widget.HyperProgressSeekBar$ProgressAnimTarget", cl);
-            java.lang.reflect.Constructor<?> ctor = targetCls.getDeclaredConstructor(bar.getClass());
+            // The constructor the widget used to have took the bar itself; on this ROM it does not
+            // (2026-11-18: NoSuchMethodException, and the module re-tried it for every bar, one log
+            // line a second). Taken from what the class actually declares now: one parameter the
+            // bar fits, else a no-argument one.
+            java.lang.reflect.Constructor<?> ctor = null;
+            java.lang.reflect.Constructor<?>[] ctors = targetCls.getDeclaredConstructors();
+            for (java.lang.reflect.Constructor<?> c : ctors) {
+                Class<?>[] ps = c.getParameterTypes();
+                if (ps.length == 1 && ps[0].isAssignableFrom(bar.getClass())) {
+                    ctor = c;
+                    break;
+                }
+            }
+            if (ctor == null) {
+                for (java.lang.reflect.Constructor<?> c : ctors) {
+                    if (c.getParameterCount() == 0) {
+                        ctor = c;
+                        break;
+                    }
+                }
+            }
+            if (ctor == null) throw new NoSuchMethodException("no usable constructor among " + ctors.length);
             ctor.setAccessible(true);
-            Object target = ctor.newInstance(bar);
+            Object target = ctor.getParameterCount() == 1 ? ctor.newInstance(bar) : ctor.newInstance();
             Xp.findMethodExact(
                             Xp.findClass("miuix.animation.Folme", cl), "use",
                             Xp.findClass("miuix.animation.FolmeObject", cl))
                     .invoke(null, target);
             Object impl = Xp.getObjectField(target, "mFolmeImpl");
             if (impl == null) {
-                Xp.log(TAG + "head animator built but Folme gave it no impl");
+                logHeadOnce("head animator built but Folme gave it no impl");
                 return;
             }
             Xp.setObjectField(bar, "mHeadAlphaAnimator", target);
@@ -312,8 +333,19 @@ final class HyperTweaks {
             } catch (Throwable ignored) {
             }
         } catch (Throwable t) {
-            Xp.log(TAG + "head animator not built, drag falls back to level 0: " + t);
+            // Once per distinct reason, not once per bar: this runs for every bar the widget
+            // makes, and the failure used to be one log line a second (2026-11-18).
+            logHeadOnce("head animator not built, drag falls back to level 0: " + t);
         }
+    }
+
+    /** [`buildHeadAnimator`]'s failures, each distinct one logged once. */
+    private static final java.util.Set<String> sHeadLogged =
+            java.util.Collections.newSetFromMap(
+                    new java.util.concurrent.ConcurrentHashMap<String, Boolean>());
+
+    private static void logHeadOnce(String message) {
+        if (sHeadLogged.add(message)) Xp.log(TAG + message);
     }
 
     /**
